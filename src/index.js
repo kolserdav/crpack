@@ -20,6 +20,7 @@ const CONFIG_PATH = path.resolve(PWD, ROOT, 'package.json');
 
 const NGINX_REGEX = /nginx\/\d+\.\d+\.\d+/;
 const DEFAULT_NGINX_CONFIG = '/etc/nginx/nginx.conf';
+const CACHE_DEFAULT_USER_NGINX_CONFIG = path.resolve(__dirname, '../.crpack/nginx.conf');
 
 const Red = '\x1b[31m';
 const Reset = '\x1b[0m';
@@ -35,6 +36,19 @@ const WARNING = 'WARNING';
 
 class Factory {
   nginxConfigPath = DEFAULT_NGINX_CONFIG;
+  traceWarnings = false;
+  renewDefault = false;
+
+  constructor() {
+    const { argv } = process;
+    if (process.argv.indexOf('--trace-warnings') !== -1) {
+      this.traceWarnings = true;
+    }
+    if (process.argv.indexOf('--renew-default') !== -1) {
+      this.renewDefault = true;
+    }
+  }
+
   /**
    * Check if nginx version requested
    * @param {string} str
@@ -53,19 +67,23 @@ class Factory {
     const { command, args, options } = props;
     console.info(Dim, `${command} ${args.join(' ')}`, Reset);
     const sh = spawn.call('sh', command, args, options || {});
+    console.log(args);
     return await new Promise((resolve, reject) => {
       sh.stdout?.on('data', (data) => {
         const str = data.toString();
-        console.log(1, `\r\r${str}`);
+        console.log(12, `\r\r${str}`);
       });
       sh.stderr?.on('data', (err) => {
         const str = err.toString();
         if (command === 'nginx' && this.isNginx(str)) {
           resolve(str);
         } else {
-          console.warn(`Error run command ${command}`, Red, str, Reset);
+          console.error(`Error run command ${command}`, Red, str, Reset);
           reject(str);
         }
+      });
+      sh.on('error', (err) => {
+        console.log(11, err);
       });
       sh.on('close', (code) => {
         resolve(code);
@@ -88,7 +106,9 @@ class Factory {
     ${version}
 > crpack [options]     
 OPTIONS
---name - package name 
+--name: package name 
+--trace-warnings: show all warnings
+--renew-default: rewrite default cache nginx file
   `;
     let args;
     let pName;
@@ -142,8 +162,48 @@ Try run "crpack --help"
     });
     const nginxV = nginxRes.match(NGINX_REGEX);
     const nginxVer = nginxV ? nginxV[0] : null;
-
+    await this.checkNginxConfig(nginxVer);
     return 0;
+  }
+
+  /**
+   * Change default nginx config path
+   */
+  async setUserNginxPath() {
+    await new Promise((resolve) => {
+      rl.question(`Nginx config path: ${Dim} ${DEFAULT_NGINX_CONFIG} ${Reset}> `, (uPath) => {
+        this.nginxConfigPath = uPath || DEFAULT_NGINX_CONFIG;
+        rl.close();
+        resolve(0);
+      });
+    });
+  }
+
+  /**
+   * Save user default nginx.conf data
+   * @returns {string | undefined}
+   */
+  cacheUserNginxConfig() {
+    let cData = '';
+    try {
+      cData = fs.readFileSync(this.nginxConfigPath).toString();
+    } catch (err) {
+      console.error(ERROR, Red, `Nginx config file is missing on ${this.nginxConfigPath}`);
+    }
+    if (cData) {
+      console.log(fs.existsSync(CACHE_DEFAULT_USER_NGINX_CONFIG), this.traceWarnings);
+      if (fs.existsSync(CACHE_DEFAULT_USER_NGINX_CONFIG) && this.traceWarnings) {
+        console.warn(
+          WARNING,
+          Yellow,
+          `Configuration of nginx user was cached earlier in ${CACHE_DEFAULT_USER_NGINX_CONFIG}, to change, run with the option --renew-default`,
+          Yellow
+        );
+      } else {
+        fs.writeFileSync(CACHE_DEFAULT_USER_NGINX_CONFIG, cData);
+      }
+    }
+    return cData;
   }
 
   /**
@@ -162,11 +222,30 @@ Try run "crpack --help"
       return 1;
     }
     console.info(INFO, `Nginx version: ${nginxVer}`);
-    rl.question(`Nginx config path: ${Dim} ${DEFAULT_NGINX_CONFIG} ${Reset}> `, (uPath) => {
-      this.nginxConfigPath = uPath;
-      rl.close();
+    await this.setUserNginxPath();
+    await this.cacheUserNginxConfig();
+    const nginxConfig = await new Promise((resolve) => {
+      parser.readConfigFile(this.nginxConfigPath, (err, res) => {
+        if (err) {
+          console.error(
+            ERROR,
+            Red,
+            `Error parse nginx config by path:`,
+            this.nginxConfigPath,
+            Reset
+          );
+        }
+        resolve(res);
+      });
     });
-    const nginxConfigRaw = fs.readFileSync(this.nginxConfigPath).toString();
+    const _nginxConfig = { ...nginxConfig };
+    console.log(_nginxConfig.http.include);
+    _nginxConfig.http.include = 'conf.d/*.conf';
+    parser.writeConfigFile('./tmp/test', _nginxConfig, false, (err, res) => {
+      console.log(1, err);
+      console.log(0, res);
+    });
+    console.log();
   }
 }
 

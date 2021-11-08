@@ -2,10 +2,18 @@
   "name": "crpack",
   "description": "Create package",
   "version": "0.0.1",
-  "main": "index.js",
+  "main": "src/index.js",
   "repository": "https://github.com/kolserdav/crpack.git",
   "author": "kolserdav <serega12101983@gmail.com>",
   "license": "MIT",
+  "bin": {
+    "crpack": "./bin/crpack.js"
+  },
+  "scripts": {
+    "bins": "NPM_PACKAGE_VERSION=${npm_package_version} ./bin/crpack.js",
+    "start": "NPM_PACKAGE_VERSION=${npm_package_version} node ${npm_package_main}",
+    "dev": "nodemon ${npm_package_main}"
+  },
   "devDependencies": {
     "@types/node": "^16.11.6",
     "eslint": "^7.32.0",

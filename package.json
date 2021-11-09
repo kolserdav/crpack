@@ -24,5 +24,19 @@
   "dependencies": {
     "@webantic/nginx-config-parser": "^1.3.0",
     "readline": "^1.3.0"
+  },
+  "fhead": {
+    "root": "src",
+    "repository": "https://github.com/kolserdav/crpack.git",
+    "patterns": [
+      ".js"
+    ],
+    "exclude": [],
+    "name": "Sergey Kolmiller",
+    "email": "serega12101983@gmail.com",
+    "license": "MIT",
+    "licenseText": "The code is distributed as is. There are no guarantees regarding the functionality of the code or parts of it.",
+    "copyright": "kolserdav, All rights reserved (c)",
+    "renewAll": true
   }
 }

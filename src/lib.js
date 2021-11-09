@@ -15,10 +15,8 @@ const fs = require('fs');
 const readline = require('readline');
 const ConfigParser = require('@webantic/nginx-config-parser');
 
-const rl = readline.createInterface({
-  input: process.stdin,
-  output: process.stdout,
-});
+const { stdin, stdout } = process;
+
 const parser = new ConfigParser();
 
 const Red = '\x1b[31m';
@@ -34,6 +32,16 @@ module.exports = class Worker {
    * @type {string}
    */
   pwd;
+
+  /**
+   * @type {string}
+   */
+  packageName;
+
+  /**
+   * @type {string}
+   */
+  domain;
 
   /**
    * @type {string}
@@ -68,7 +76,7 @@ module.exports = class Worker {
   /**
    * @type {string}
    */
-  configpath;
+  configPath;
 
   /**
    * @type {string}
@@ -104,11 +112,12 @@ module.exports = class Worker {
     this.pwd = process.env.PWD;
     this.npmPackageVersion = process.env.NPM_PACKAGE_VERSION;
     this.nginxConfigPath = '/etc/nginx/nginx.conf';
+    this.domain = 'crpack1.uyem.ru';
     this.traceWarnings = false;
     this.renewDefault = false;
     this.prod = path.relative(this.pwd, __dirname) !== 'src';
     this.root = this.prod ? this.pwd : './';
-    this.configpath = path.resolve(this.pwd, this.root, 'package.json');
+    this.configPath = path.resolve(this.pwd, this.root, 'package.json');
     this.cacheDefaultUserNginxConfig = path.resolve(__dirname, '../.crpack/nginx.conf');
     this.error = '[error]';
     this.info = '[info]';
@@ -126,7 +135,6 @@ module.exports = class Worker {
     const { command, args, options } = props;
     console.info(Dim, `${command} ${args.join(' ')}`, Reset);
     const sh = spawn.call('sh', command, args, options || {});
-    console.log(args);
     return await new Promise((resolve, reject) => {
       sh.stdout?.on('data', (data) => {
         const str = data.toString();
@@ -134,7 +142,7 @@ module.exports = class Worker {
       });
       sh.stderr?.on('data', (err) => {
         const str = err.toString();
-        if (command === 'nginx' && this.isNginx(str)) {
+        if (command === 'nginx' && this.nginxRegex.test(str)) {
           resolve(str);
         } else {
           console.error(`Error run command ${command}`, Red, str, Reset);
@@ -178,7 +186,9 @@ module.exports = class Worker {
         console.warn(
           this.warning,
           Yellow,
-          `Configuration of nginx user was cached earlier in ${this.cacheDefaultUserNginxConfig}, to change, run with the option --renew-default`,
+          Dim,
+          `Configuration of nginx user was cached earlier in ${this.cacheDefaultUserNginxConfig}, to change,
+           run with the option:${Reset}${Bright} --renew-default`,
           Reset
         );
       } else {
@@ -190,33 +200,36 @@ module.exports = class Worker {
 
   /**
    *
-   * @param {string} name
    * @returns {Promise<number>}
    */
-  async createPackage(name) {
-    const nConf = await this.getNginxConfig(name);
+  async createPackage() {
+    this.packageName = await this.setPackage();
+    console.info(this.info, 'Package name:', this.packageName);
+    this.nginxConfigPath = await this.setUserNginxPath();
+    console.info(this.info, 'Target nginx config path:', this.nginxConfigPath);
+    const nginxConfig = await this.getNginxConfig();
+    this.domain = await this.setDomain();
+    console.info(this.info, 'Domain name:', this.domain);
+    const _nginxConfig = { ...nginxConfig };
+    if (_nginxConfig.http) {
+    } else {
+      delete _nginxConfig.mime;
+      console.warn(`Section http is missing on ${JSON.stringify(_nginxConfig)}`);
+    }
+
+    await this.writeNginxConfig(
+      this.prod ? this.nginxConfigPath : './tmp/nginx.conf',
+      _nginxConfig,
+      this.packageName
+    );
     return 0;
   }
 
   /**
-   * Change default nginx config path
-   */
-  async setUserNginxPath() {
-    await new Promise((resolve) => {
-      rl.question(`Nginx config path: ${Dim} ${this.nginxConfigPath} ${Reset}> `, (uPath) => {
-        this.nginxConfigPath = uPath || this.nginxConfigPath;
-        rl.close();
-        resolve(0);
-      });
-    });
-  }
-
-  /**
    * Parse nginx.conf file
-   * @param {string} name
    * @returns {Promise<Object | 1>}
    */
-  async getNginxConfig(name) {
+  async getNginxConfig() {
     const command = 'nginx';
     const args = ['-v'];
     const nginxRes = await this.getSpawn({
@@ -238,9 +251,15 @@ module.exports = class Worker {
       return 1;
     }
     console.info(this.info, `Nginx version: ${nginxVer}`);
-    await this.setUserNginxPath();
     await this.cacheUserNginxConfig();
-    const nginxConfig = await new Promise((resolve) => {
+    if (this.traceWarnings) {
+      console.warn(
+        this.warning,
+        Yellow,
+        `${Dim} First your nginx config saved on ${this.cacheDefaultUserNginxConfig} to show run command: ${Reset}${Bright} crpack show-default ${Reset}`
+      );
+    }
+    return new Promise((resolve) => {
       parser.readConfigFile(this.nginxConfigPath, (err, res) => {
         if (err) {
           console.error(
@@ -250,16 +269,86 @@ module.exports = class Worker {
             this.nginxConfigPath,
             Reset
           );
+          resolve(1);
         }
         resolve(res);
       });
     });
-    await this.writeNginxConfig(
-      this.prod ? this.nginxConfigPath : './tmp/nginx.conf',
-      nginxConfig,
-      name
-    );
-    return nginxConfig;
+  }
+
+  /**
+   * return package.json config
+   * @returns {Object | 1}
+   */
+  packageJson() {
+    let result;
+    try {
+      result = fs.readFileSync(this.configPath).toString();
+    } catch (err) {
+      console.error(this.error, Red, `${this.configPath} not found `, Reset);
+      return 1;
+    }
+    return JSON.parse(result);
+  }
+
+  /**
+   * Set global package name
+   * @returns {Promise<string>}
+   */
+  async setPackage() {
+    const rl = readline.createInterface({
+      input: stdin,
+      output: stdout,
+    });
+    const { name } = this.packageJson();
+    return new Promise((resolve) => {
+      rl.question(`Package name: ${Dim} ${name} ${Reset}> `, (value) => {
+        this.packageName = value || name || this.packageName;
+        rl.close();
+        resolve(value || name);
+      });
+    });
+  }
+
+  /**
+   * Change default nginx config path
+   * @returns {Promise<string>}
+   */
+  async setUserNginxPath() {
+    const rl = readline.createInterface({
+      input: stdin,
+      output: stdout,
+    });
+    return new Promise((resolve) => {
+      rl.question(`Nginx config path: ${Dim} ${this.nginxConfigPath} ${Reset}> `, (uPath) => {
+        this.nginxConfigPath = uPath || this.nginxConfigPath;
+        rl.close();
+        resolve(this.nginxConfigPath);
+      });
+    });
+  }
+
+  /**
+   * Set global package name
+   * @returns {Promise<string>}
+   */
+  async setDomain() {
+    const rl = readline.createInterface({
+      input: stdin,
+      output: stdout,
+    });
+    const { homepage } = this.packageJson();
+    const homePage = homepage
+      ? homepage.replace(/https?:\/\//, '').replace(/\//g, '')
+      : this.domain;
+    return new Promise((resolve) => {
+      rl.question(`Domain name: ${Dim} ${homePage} ${Reset}> `, (value) => {
+        const _value = value || homePage;
+        this.domain = _value;
+        rl.close();
+        resolve(this.domain);
+      });
+    });
   }
 
   /**
@@ -280,14 +369,5 @@ module.exports = class Worker {
         resolve(res);
       });
     });
-  }
-
-  /**
-   * Check if nginx version requested
-   * @param {string} str
-   * @returns {boolean}
-   */
-  isNginx(str) {
-    return this.nginxRegex.test(str);
   }
 };

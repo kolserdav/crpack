@@ -20,14 +20,106 @@ const Dim = '\x1b[2m';
 const Blink = '\x1b[5m';
 
 class Factory extends Worker {
+  /**
+   * @type {string} - current command
+   */
+  arg;
+
+  /**
+   * @type {string} - name of package
+   */
+  name;
+
+  /**
+   * @type {string} - version of package
+   */
+  version;
+
+  /**
+   * @type {string} - help result
+   */
+  help;
+
+  /**
+   * @type {boolean}
+   */
+  traceWarnings;
+
+  /**
+   * @type {boolean} - renew the default cache of config
+   */
+  renewDefault;
+
+  /**
+   * Commands
+   * @type {{
+   *  showDefault: 'show-default';
+   *  start: 'start';
+   * }}
+   */
+  props = {
+    showDefault: 'show-default',
+    start: 'start',
+  };
+
+  /**
+   * Parameters
+   *  @type {{
+   *  traceWarnings: '--trace-warnings';
+   *  renewDefault: '--renew-default';
+   *  dev: '--dev'
+   * }}
+   */
+  params = {
+    traceWarnings: '--trace-warnings',
+    renewDefault: '--renew-default',
+    dev: '--dev',
+  };
+
   constructor() {
     super();
-    const { argv } = process;
-    if (process.argv.indexOf('--trace-warnings') !== -1) {
+    const controller = new AbortController();
+    const { signal } = controller;
+    const argv = process.argv;
+    this.version = `CrPack version ${this.npmPackageVersion}`;
+    this.help = `
+    ${this.version}
+> crpack [options] <command>   
+
+COMMANDS:
+start: create package
+
+OPTIONS: 
+--trace-warnings: show all warnings
+--renew-default: rewrite default cache nginx file
+  `;
+    const { showDefault, start } = this.props;
+
+    /**
+     * all argument variants
+     */
+    if (argv.indexOf(start) !== -1) {
+      this.arg = start;
+      this.setAdditional();
+    }
+    if (argv.indexOf(showDefault) !== -1) {
+      this.arg = showDefault;
+    }
+  }
+
+  /**
+   * added global settings for request
+   */
+  setAdditional() {
+    const argv = process.argv;
+    const { traceWarnings, renewDefault, dev } = this.params;
+    if (argv.indexOf(traceWarnings) !== -1) {
       this.traceWarnings = true;
     }
-    if (process.argv.indexOf('--renew-default') !== -1) {
+    if (argv.indexOf(renewDefault) !== -1) {
       this.renewDefault = true;
+    }
+    if (argv.indexOf(dev) !== -1) {
     }
   }
 
@@ -35,54 +127,43 @@ class Factory extends Worker {
    * Commands map
    */
   async run() {
-    console.info(this.info, Reset, 'Started create system package script...');
-    const controller = new AbortController();
-    const { signal } = controller;
-    const arg2 = process.argv[2];
-    const version = `CrPack version ${this.npmPackageVersion}`;
-    const help = `
-    ${version}
-> crpack [options]     
-OPTIONS
---name: package name 
---trace-warnings: show all warnings
---renew-default: rewrite default cache nginx file
-  `;
-    let args;
     let pName;
-    switch (arg2) {
+    switch (this.arg) {
+      case this.props.showDefault:
+        const result = await this.getSpawn({
+          command: 'cat',
+          args: [this.cacheDefaultUserNginxConfig],
+        });
+        console.info(result);
+        break;
       case '-h':
-        console.info(help);
+        console.info(this.help);
         break;
       case '--help':
-        console.info(help);
+        console.info(this.help);
         break;
-      case '--name':
-        pName = process.argv[3];
-        if (!pName) {
-          console.error(this.error, Red, `Package name is ${pName}, please use string`, Reset);
-          break;
-        }
-        await this.createPackage(pName);
-        console.info(this.info, `Package ${pName} created successfully!`);
-        process.exit(0);
+      case this.props.start:
+        console.info(this.info, Reset, 'Started create system package script...');
+        await this.createPackage();
+        console.info(this.info, Green, `Package ${this.domain} created successfully!`, Reset);
         break;
       case '-v':
-        console.info(version);
+        console.info(this.version);
         break;
       case '--version':
-        console.info(version);
+        console.info(this.version);
         break;
       default:
         console.info(
           `
-error Unknown command ${arg2}
+error Unknown command ${this.arg}
 Try run "crpack --help" 
-        ${help}
+        ${this.help}
       `,
           Reset
         );
     }
+    process.exit(0);
   }
 }
 

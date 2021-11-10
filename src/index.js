@@ -141,15 +141,24 @@ NGINX_PATH: [/etc/nginx]
     console.info(this.info, 'Package name:', this.packageName);
     this.nginxConfigPath = await this.setUserNginxPath();
     console.info(this.info, 'Target nginx config path:', this.nginxConfigPath);
-    const nginxConfig = await this.getNginxConfig();
+    const nginxConfig = await this.getNginxConfig(this.nginxConfigPath);
+    if (this.traceWarnings) {
+      console.warn(
+        this.warning,
+        Yellow,
+        `${Dim} Cache of nginx.conf based on ${this.cacheDefaultUserNginxConfig} to show run command: ${Reset}${Bright} crpack show-default ${Reset}`
+      );
+    }
     this.domain = await this.setDomain();
     console.info(this.info, 'Domain name:', this.domain);
     const nginxData = await this.createNginxFile(nginxConfig);
-    await this.writeNginxConfig(
-      this.prod || this.test ? this.nginxConfigPath : './tmp/nginx.conf',
-      nginxData,
-      this.packageName
-    );
+    if (nginxData !== 1) {
+      await this.writeNginxConfig(
+        this.prod || this.test ? this.nginxConfigPath : './tmp/nginx.conf',
+        nginxData,
+        this.packageName
+      );
+    }
     const systemdConfig = this.getSystemConfig();
     const systemData = this.createIniFile(systemdConfig._ini.sections);
     this.writeSystemdConfig(systemData);
@@ -189,9 +198,9 @@ NGINX_PATH: [/etc/nginx]
         break;
       default:
         console.info(
-          `
-error Unknown command ${this.arg}
-Try run "crpack help"
+          this.error,
+          `Unknown command ${this.arg}
+Try run ${Bright} crpack -h
       `,
           Reset
         );

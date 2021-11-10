@@ -135,6 +135,11 @@ module.exports = class Worker {
    */
   nginxPath;
 
+  /**
+   * @type {string}
+   */
+  nginxVersion;
+
   constructor() {
     this.pwd = process.env.PWD;
     this.npmPackageVersion = process.env.NPM_PACKAGE_VERSION;
@@ -144,6 +149,7 @@ module.exports = class Worker {
     this.domain = 'example.com';
     this.ini = '';
     this.test = false;
+    this.nginxVersion = '';
     this.traceWarnings = false;
     this.renewDefault = false;
     this.prod = path.relative(this.pwd, __dirname) !== 'src';
@@ -214,7 +220,7 @@ module.exports = class Worker {
       return cData;
     }
     if (cData) {
-      if (!fs.existsSync(this.cacheDefaultUserNginxConfig)) {
+      if (!fs.existsSync(this.cacheDefaultUserNginxConfig) || this.renewDefault) {
         fs.writeFileSync(this.cacheDefaultUserNginxConfig, cData);
       }
     }
@@ -222,10 +228,9 @@ module.exports = class Worker {
   }
 
   /**
-   * Parse nginx.conf file
-   * @returns {Promise<Object | 1>}
+   *
    */
-  async getNginxConfig() {
+  async setNginxVersion() {
     const command = 'nginx';
     const args = ['-v'];
     const nginxRes = await this.getSpawn({
@@ -236,8 +241,20 @@ module.exports = class Worker {
       console.error(this.error, `Error ${command} ${args.join(' ')}`);
     });
     const nginxV = nginxRes.match(this.nginxRegex);
-    const nginxVer = nginxV ? nginxV[0] : null;
-    if (!nginxVer) {
+    this.nginxVersion = nginxV ? nginxV[0] : null;
+  }
+
+  /**
+   * Parse nginx.conf file
+   * @param {string} configPath
+   * @returns {Promise<Object | 1>}
+   */
+  async getNginxConfig(configPath) {
+    if (!this.nginxVersion) {
+      await this.setNginxVersion();
+      console.info(this.info, `Nginx version: ${this.nginxVersion}`);
+    }
+    if (!this.nginxVersion) {
       console.warn(
         this.warning,
         Yellow,
@@ -246,27 +263,13 @@ module.exports = class Worker {
       );
       return 1;
     }
-    console.info(this.info, `Nginx version: ${nginxVer}`);
     await this.cacheUserNginxConfig();
-    if (this.traceWarnings) {
-      console.warn(
-        this.warning,
-        Yellow,
-        `${Dim} Cache of nginx.conf based on ${this.cacheDefaultUserNginxConfig} to show run command: ${Reset}${Bright} crpack show-default ${Reset}`
-      );
-    }
     return new Promise((resolve) => {
       parser.readConfigFile(
-        this.nginxConfigPath,
+        configPath,
         (err, res) => {
           if (err) {
-            console.error(
-              this.error,
-              Red,
-              `Error parse nginx config by path:`,
-              this.nginxConfigPath,
-              Reset
-            );
+            console.error(this.error, Red, `Error parse nginx config by path:`, configPath, Reset);
             resolve(1);
           }
           resolve(res);
@@ -417,7 +420,8 @@ to change run with the option:${Reset}${Bright} --renew-default`,
         this.warning,
         Yellow,
         Dim,
-        `To change default domain add property ${Reset}${Bright} homepage ${Reset}${Yellow} to your package.json`,
+        `To change default domain
+ add property ${Reset}${Bright} homepage ${Reset}${Yellow} ${Yellow}${Dim} into your ${Reset}${Bright} package.json`,
         Reset
       );
     }
@@ -467,26 +471,37 @@ to change run with the option:${Reset}${Bright} --renew-default`,
   /**
    *
    * @param {ReturnType<parser['readConfigFile']>} nginxConfig
+   * @param {boolean} subConfig
    * @returns {ReturnType<parser['readConfigFile']>}
    */
-  createNginxFile(nginxConfig) {
+  createNginxFile(nginxConfig, subConfig = false) {
     const confDValue = 'conf.d/*.conf';
-    const _nginxConfig = { ...nginxConfig };
+    let _nginxConfig = { ...nginxConfig };
     if (!_nginxConfig.http) {
-      console.error(
-        this.error,
-        Red,
-        `Section http is missing on ${JSON.stringify(_nginxConfig)}`,
-        Reset
-      );
+      if (!subConfig) {
+        console.error(
+          this.error,
+          Red,
+          `Section http is missing on ${JSON.stringify(_nginxConfig)}`,
+          Reset
+        );
+        return 1;
+      }
+      const confDPath = `${this.nginxConfigPath}/conf.d`;
+      const confDItems = fs.readdirSync(confDPath);
+      if (confDItems.length !== undefined) {
+        confDItems.map((item) => {
+          console.log(item);
+        });
+      }
     } else {
       const { http } = nginxConfig;
       const { http: _http } = _nginxConfig;
       const keys = Object.keys(http);
       let confD = false;
+      let serverC = false;
       for (let i = 0; keys[i]; i++) {
         const key = keys[i];
-        console.log(http, key);
         const values = http[key];
         switch (key) {
           case 'include':
@@ -503,6 +518,22 @@ to change run with the option:${Reset}${Bright} --renew-default`,
             }
             break;
           case 'server':
+            if (typeof values.length !== 'undefined') {
+              _nginxConfig.http.server = values.map((value) => {
+                if (value.server_name === this.domain) {
+                  serverC = true;
+                  return this.changeNginxServerSection(value);
+                }
+                return value;
+              });
+            } else {
+              if (values !== undefined) {
+                if (values.server_name === this.domain) {
+                  serverC = true;
+                  _nginxConfig.http.server = this.changeNginxServerSection(values);
+                }
+              }
+            }
             break;
         }
       }
@@ -516,8 +547,82 @@ to change run with the option:${Reset}${Bright} --renew-default`,
           _http.include.push(confDValue);
         }
       }
+      // get server config from conf.d
+      if (!serverC) {
+        this.changeNginxServerSection();
+      }
     }
     _nginxConfig;
     return _nginxConfig;
+  }
+
+  /**
+   *
+   * @param {Object | undefined} server
+   * @returns {Promise<1 | ReturnType<parser['readConfigFile']>['server']>}
+   */
+  async changeNginxServerSection(server = undefined) {
+    let _server = server ? { ...server } : undefined;
+    const confDPath = `${this.nginxPath}/conf.d/`;
+    const serverPath = `${confDPath}${this.domain}.conf`;
+    const nginxTemplatePath = path.resolve(__dirname, '../.crpack/templates/nginx/server.conf');
+    const nginxTemplate = await this.getNginxConfig(nginxTemplatePath);
+    let _serverPath = '';
+    // when server with same name is not found into nginx.conf
+    if (!server) {
+      _server = fs.existsSync(serverPath) ? await this.getNginxConfig(serverPath) : 1;
+      _server = _server !== 1 ? _server.server : 1;
+      if (_server === 1) {
+        const serverPaths = fs.readdirSync(confDPath);
+        let exsists = false;
+        serverPaths.map(async (item) => {
+          const confPath = path.resolve(confDPath, item);
+          const s = await this.getNginxConfig(confPath);
+          if (s !== 1) {
+            if (s.server.server_name === this.domain) {
+              exsists = true;
+              _server = s.server;
+              _serverPath = confPath;
+            }
+          }
+        });
+        if (!exsists) {
+          _serverPath = serverPath;
+          _server = { ...nginxTemplate.server };
+        }
+      } else if (fs.existsSync(serverPath)) {
+        _serverPath = serverPath;
+      }
+    }
+
+    const keys = Object.keys(_server);
+    for (let i = 0; keys[i]; i++) {
+      const key = keys[i];
+      const field = _server[key];
+      let value = '';
+      switch (key) {
+        case 'server_name':
+          value = this.domain;
+          break;
+        case 'access_log':
+          value = `/var/log/nginx/${this.domain}.access.log`;
+          break;
+        case 'error_log':
+          value = `/var/log/nginx/${this.domain}.error.log`;
+          break;
+        case 'location /':
+          Object.keys(_server[key]).map((_key) => {
+            if (_key === 'proxy_pass') {
+              _server[key][_key] = `http://localhost:${this.port}`;
+            }
+          });
+          break;
+        default:
+          value = field;
+      }
+      _server[key] = value;
+    }
+    // todo
+    return _server;
   }
 };

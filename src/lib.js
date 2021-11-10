@@ -14,10 +14,12 @@ const path = require('path');
 const fs = require('fs');
 const readline = require('readline');
 const ConfigParser = require('@webantic/nginx-config-parser');
+const { ConfigIniParser } = require('config-ini-parser');
 
+const delimiter = '\n';
 const { stdin, stdout } = process;
-
 const parser = new ConfigParser();
+const _parser = new ConfigIniParser(delimiter);
 
 const Red = '\x1b[31m';
 const Reset = '\x1b[0m';
@@ -108,17 +110,38 @@ module.exports = class Worker {
    */
   nginxRegex;
 
+  /**
+   * @type {string}
+   */
+  systemdConfigDir;
+
+  /**
+   * @type {string}
+   */
+  templateSystemdConfig;
+
+  /**
+   * @type {string}
+   */
+  ini;
+
   constructor() {
     this.pwd = process.env.PWD;
     this.npmPackageVersion = process.env.NPM_PACKAGE_VERSION;
     this.nginxConfigPath = '/etc/nginx/nginx.conf';
-    this.domain = 'crpack1.uyem.ru';
+    this.systemdConfigDir = '/etc/systemd/system/';
+    this.domain = 'example.com';
+    this.ini = '';
     this.traceWarnings = false;
     this.renewDefault = false;
     this.prod = path.relative(this.pwd, __dirname) !== 'src';
     this.root = this.prod ? this.pwd : './';
     this.configPath = path.resolve(this.pwd, this.root, 'package.json');
     this.cacheDefaultUserNginxConfig = path.resolve(__dirname, '../.crpack/nginx.conf');
+    this.templateSystemdConfig = path.resolve(
+      __dirname,
+      '../.crpack/templates/systemd/daemon.service'
+    );
     this.error = '[error]';
     this.info = '[info]';
     this.warning = '[warning]';
@@ -199,33 +222,6 @@ module.exports = class Worker {
   }
 
   /**
-   *
-   * @returns {Promise<number>}
-   */
-  async createPackage() {
-    this.packageName = await this.setPackage();
-    console.info(this.info, 'Package name:', this.packageName);
-    this.nginxConfigPath = await this.setUserNginxPath();
-    console.info(this.info, 'Target nginx config path:', this.nginxConfigPath);
-    const nginxConfig = await this.getNginxConfig();
-    this.domain = await this.setDomain();
-    console.info(this.info, 'Domain name:', this.domain);
-    const _nginxConfig = { ...nginxConfig };
-    if (_nginxConfig.http) {
-    } else {
-      delete _nginxConfig.mime;
-      console.warn(`Section http is missing on ${JSON.stringify(_nginxConfig)}`);
-    }
-
-    await this.writeNginxConfig(
-      this.prod ? this.nginxConfigPath : './tmp/nginx.conf',
-      _nginxConfig,
-      this.packageName
-    );
-    return 0;
-  }
-
-  /**
    * Parse nginx.conf file
    * @returns {Promise<Object | 1>}
    */
@@ -274,6 +270,67 @@ module.exports = class Worker {
         resolve(res);
       });
     });
+  }
+
+  /**
+   *
+   * @typedef {{
+   *  _ini: {
+   *   sections: {
+   *     name: string;
+   *     value: string;
+   *     options: Ini['_ini']['sections'];
+   *   }[];
+   *  }
+   * }} Ini
+   */
+
+  /**
+   *
+   * @returns {Ini}
+   */
+  getSystemConfig() {
+    const fileName = `${this.systemdConfigDir}${this.domain}.service`;
+    let iniContent;
+    if (fs.existsSync(fileName)) {
+      iniContent = fs.readFileSync(fileName).toString();
+    } else {
+      iniContent = fs.readFileSync(this.templateSystemdConfig).toString();
+    }
+    /**
+     * @type {any}
+     */
+    const data = _parser.parse(iniContent);
+    /**
+     * @type {Ini}
+     */
+    const _data = { ...data };
+    data._ini.sections.map((item) => {});
+    const ini = this.createIniFile(_data._ini.sections);
+    console.log(ini);
+    return data;
+  }
+
+  /**
+   *
+   * @param {Ini['_ini']['sections']} data
+   * @returns
+   */
+  createIniFile(data) {
+    data.map((item) => {
+      const { name, options, value } = item;
+      if (options) {
+        if (options.length !== 0) {
+          this.ini += `[${name}]${delimiter}`;
+
+          return this.createIniFile(options);
+        }
+      }
+      if (name !== '__DEFAULT_SECTION__') {
+        this.ini += `${name}=${value}${delimiter}`;
+      }
+    });
+    return this.ini;
   }
 
   /**

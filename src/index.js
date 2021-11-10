@@ -124,6 +124,33 @@ OPTIONS:
   }
 
   /**
+   *
+   * @returns {Promise<number>}
+   */
+  async createPackage() {
+    this.packageName = await this.setPackage();
+    console.info(this.info, 'Package name:', this.packageName);
+    this.nginxConfigPath = await this.setUserNginxPath();
+    console.info(this.info, 'Target nginx config path:', this.nginxConfigPath);
+    const nginxConfig = await this.getNginxConfig();
+    this.domain = await this.setDomain();
+    console.info(this.info, 'Domain name:', this.domain);
+    const _nginxConfig = { ...nginxConfig };
+    if (_nginxConfig.http) {
+    } else {
+      delete _nginxConfig.mime;
+      console.warn(`Section http is missing on ${JSON.stringify(_nginxConfig)}`);
+    }
+    const systemdConfig = this.getSystemConfig();
+    await this.writeNginxConfig(
+      this.prod ? this.nginxConfigPath : './tmp/nginx.conf',
+      _nginxConfig,
+      this.packageName
+    );
+    return 0;
+  }
+
+  /**
    * Commands map
    */
   async run() {

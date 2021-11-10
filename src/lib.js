@@ -125,13 +125,25 @@ module.exports = class Worker {
    */
   ini;
 
+  /**
+   *@type {boolean}
+   * */
+  test;
+
+  /**
+   * @type {string}
+   */
+  nginxPath;
+
   constructor() {
     this.pwd = process.env.PWD;
     this.npmPackageVersion = process.env.NPM_PACKAGE_VERSION;
-    this.nginxConfigPath = '/etc/nginx/nginx.conf';
+    this.nginxPath = process.env.NGINX_PATH || '/etc/nginx';
+    this.nginxConfigPath = `${this.nginxPath}/nginx.conf`;
     this.systemdConfigDir = '/etc/systemd/system/';
     this.domain = 'example.com';
     this.ini = '';
+    this.test = false;
     this.traceWarnings = false;
     this.renewDefault = false;
     this.prod = path.relative(this.pwd, __dirname) !== 'src';
@@ -158,6 +170,7 @@ module.exports = class Worker {
     const { command, args, options } = props;
     console.info(Dim, `${command} ${args.join(' ')}`, Reset);
     const sh = spawn.call('sh', command, args, options || {});
+    sh.stdout.pipe(process.stdout);
     return await new Promise((resolve, reject) => {
       sh.stdout?.on('data', (data) => {
         const str = data.toString();
@@ -201,16 +214,7 @@ module.exports = class Worker {
       return cData;
     }
     if (cData) {
-      if (fs.existsSync(this.cacheDefaultUserNginxConfig) && this.traceWarnings) {
-        console.warn(
-          this.warning,
-          Yellow,
-          Dim,
-          `Configuration of nginx user was cached earlier in ${this.cacheDefaultUserNginxConfig}, to change,
-           run with the option:${Reset}${Bright} --renew-default`,
-          Reset
-        );
-      } else {
+      if (!fs.existsSync(this.cacheDefaultUserNginxConfig)) {
         fs.writeFileSync(this.cacheDefaultUserNginxConfig, cData);
       }
     }
@@ -248,23 +252,27 @@ module.exports = class Worker {
       console.warn(
         this.warning,
         Yellow,
-        `${Dim} First your nginx config saved on ${this.cacheDefaultUserNginxConfig} to show run command: ${Reset}${Bright} crpack show-default ${Reset}`
+        `${Dim} Cache of nginx.conf based on ${this.cacheDefaultUserNginxConfig} to show run command: ${Reset}${Bright} crpack show-default ${Reset}`
       );
     }
     return new Promise((resolve) => {
-      parser.readConfigFile(this.nginxConfigPath, (err, res) => {
-        if (err) {
-          console.error(
-            this.error,
-            Red,
-            `Error parse nginx config by path:`,
-            this.nginxConfigPath,
-            Reset
-          );
-          resolve(1);
-        }
-        resolve(res);
-      });
+      parser.readConfigFile(
+        this.nginxConfigPath,
+        (err, res) => {
+          if (err) {
+            console.error(
+              this.error,
+              Red,
+              `Error parse nginx config by path:`,
+              this.nginxConfigPath,
+              Reset
+            );
+            resolve(1);
+          }
+          resolve(res);
+        },
+        { parseIncludes: false }
+      );
     });
   }
 
@@ -301,9 +309,9 @@ module.exports = class Worker {
      * @type {Ini}
      */
     const _data = { ...data };
-    data._ini.sections.map((item) => {});
-    const ini = this.createIniFile(_data._ini.sections);
-    console.log(ini);
+    data._ini.sections.map((item) => {
+      /**todo */
+    });
     return data;
   }
 
@@ -368,6 +376,16 @@ module.exports = class Worker {
    * @returns {Promise<string>}
    */
   async setUserNginxPath() {
+    if (fs.existsSync(this.cacheDefaultUserNginxConfig) && this.traceWarnings) {
+      console.warn(
+        this.warning,
+        Yellow,
+        Dim,
+        `Configuration of nginx user was cached earlier in ${this.cacheDefaultUserNginxConfig},
+to change run with the option:${Reset}${Bright} --renew-default`,
+        Reset
+      );
+    }
     const rl = readline.createInterface({
       input: stdin,
       output: stdout,
@@ -394,6 +412,15 @@ module.exports = class Worker {
     const homePage = homepage
       ? homepage.replace(/https?:\/\//, '').replace(/\//g, '')
       : this.domain;
+    if (this.traceWarnings) {
+      console.warn(
+        this.warning,
+        Yellow,
+        Dim,
+        `To change default domain add property ${Reset}${Bright} homepage ${Reset}${Yellow} to your package.json`,
+        Reset
+      );
+    }
     return new Promise((resolve) => {
       rl.question(`Domain name: ${Dim} ${homePage} ${Reset}> `, (value) => {
         const _value = value || homePage;
@@ -407,7 +434,7 @@ module.exports = class Worker {
   /**
    * Save config
    * @param {string} filePath
-   * @param {Object} nginxConfig
+   * @param {ReturnType<parser['readConfigFile']>} nginxConfig
    * @param {string} domain
    * @returns
    */
@@ -422,5 +449,75 @@ module.exports = class Worker {
         resolve(res);
       });
     });
+  }
+
+  /**
+   *
+   * @param {string} data
+   */
+  writeSystemdConfig(data) {
+    fs.writeFileSync(
+      this.prod || this.test
+        ? path.normalize(`${this.systemdConfigDir}/${this.domain}.service`)
+        : './tmp/daemon.service',
+      data
+    );
+  }
+
+  /**
+   *
+   * @param {ReturnType<parser['readConfigFile']>} nginxConfig
+   * @returns {ReturnType<parser['readConfigFile']>}
+   */
+  createNginxFile(nginxConfig) {
+    const confDValue = 'conf.d/*.conf';
+    const _nginxConfig = { ...nginxConfig };
+    if (!_nginxConfig.http) {
+      console.error(
+        this.error,
+        Red,
+        `Section http is missing on ${JSON.stringify(_nginxConfig)}`,
+        Reset
+      );
+    } else {
+      const { http } = nginxConfig;
+      const { http: _http } = _nginxConfig;
+      const keys = Object.keys(http);
+      let confD = false;
+      for (let i = 0; keys[i]; i++) {
+        const key = keys[i];
+        console.log(http, key);
+        const values = http[key];
+        switch (key) {
+          case 'include':
+            if (typeof values !== 'string') {
+              values.map((value) => {
+                if (value === confDValue) {
+                  confD = true;
+                }
+              });
+            } else {
+              if (values === confDValue) {
+                confD = true;
+              }
+            }
+            break;
+          case 'server':
+            break;
+        }
+      }
+      // add include conf.d if needed
+      if (!confD) {
+        if (typeof _http.include === 'string') {
+          if (_http.include !== confDValue) {
+            _http.include = [_http.include, confDValue];
+          }
+        } else {
+          _http.include.push(confDValue);
+        }
+      }
+    }
+    _nginxConfig;
+    return _nginxConfig;
   }
 };

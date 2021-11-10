@@ -50,22 +50,16 @@ class Factory extends Worker {
    */
   renewDefault;
 
-	/**
-	 *@type {boolean}
-	 * */
-	test;
-	
-
   /**
    * Commands
    * @type {{
    *  showDefault: 'show-default';
-   *  start: 'start';
+   *  run: 'run';
    * }}
    */
   props = {
     showDefault: 'show-default',
-    start: 'start',
+    run: 'run',
   };
 
   /**
@@ -73,7 +67,7 @@ class Factory extends Worker {
    *  @type {{
    *  traceWarnings: '--trace-warnings';
    *  renewDefault: '--renew-default';
-   *  test: '--test'
+   *  test: '--test',
    * }}
    */
   params = {
@@ -86,27 +80,34 @@ class Factory extends Worker {
     super();
     const controller = new AbortController();
     const { signal } = controller;
+    this.arg = process.argv[2];
     const argv = process.argv;
-		this.test = false;
     this.version = `CrPack version ${this.npmPackageVersion}`;
     this.help = `
     ${this.version}
 > crpack [options] <command>   
 
 COMMANDS:
-start: create package
+run: start create package script
+show-default: show default nginx config
 
-OPTIONS: 
+OPTIONS:
+-h | --help: show this man 
+-v | --version: show CrPack version
 --trace-warnings: show all warnings
 --renew-default: rewrite default cache nginx file
+--test: run in dev as prod
+
+ENVIRONMENTS:
+NGINX_PATH: [/etc/nginx]
   `;
-    const { showDefault, start } = this.props;
+    const { showDefault, run } = this.props;
 
     /**
-     * all argument variants
+     * Commands
      */
-    if (argv.indexOf(start) !== -1) {
-      this.arg = start;
+    if (argv.indexOf(run) !== -1) {
+      this.arg = run;
       this.setAdditional();
     }
     if (argv.indexOf(showDefault) !== -1) {
@@ -115,7 +116,7 @@ OPTIONS:
   }
 
   /**
-   * added global settings for request
+   * Options
    */
   setAdditional() {
     const argv = process.argv;
@@ -127,8 +128,8 @@ OPTIONS:
       this.renewDefault = true;
     }
     if (argv.indexOf(test) !== -1) {
-    	this.test = true;
-		}
+      this.test = true;
+    }
   }
 
   /**
@@ -141,21 +142,17 @@ OPTIONS:
     this.nginxConfigPath = await this.setUserNginxPath();
     console.info(this.info, 'Target nginx config path:', this.nginxConfigPath);
     const nginxConfig = await this.getNginxConfig();
-		this.domain = await this.setDomain();
+    this.domain = await this.setDomain();
     console.info(this.info, 'Domain name:', this.domain);
-    const _nginxConfig = { ...nginxConfig };
-    if (_nginxConfig.http) {
-    } else {
-      delete _nginxConfig.mime;
-      console.warn(`Section http is missing on ${JSON.stringify(_nginxConfig)}`);
-    }
+    const nginxData = await this.createNginxFile(nginxConfig);
     await this.writeNginxConfig(
       this.prod || this.test ? this.nginxConfigPath : './tmp/nginx.conf',
-      _nginxConfig,
+      nginxData,
       this.packageName
     );
     const systemdConfig = this.getSystemConfig();
-		await fs.writeFileSync(this.prod || this.test ? path.normalize(`${this.systemdConfigDir}/${this.domain}.service`) : './tmp/daemon.service', systemdConfig);
+    const systemData = this.createIniFile(systemdConfig._ini.sections);
+    this.writeSystemdConfig(systemData);
     return 0;
   }
 
@@ -178,9 +175,9 @@ OPTIONS:
       case '--help':
         console.info(this.help);
         break;
-      case this.props.start:
-        console.log(process.env.USER)
-				console.info(this.info, Reset, 'Started create system package script...');
+      case this.props.run:
+        console.log(process.env.USER);
+        console.info(this.info, Reset, 'Started create system package script...');
         await this.createPackage();
         console.info(this.info, Green, `Package ${this.domain} created successfully!`, Reset);
         break;
@@ -194,8 +191,7 @@ OPTIONS:
         console.info(
           `
 error Unknown command ${this.arg}
-Try run "crpack --help" 
-        ${this.help}
+Try run "crpack help"
       `,
           Reset
         );

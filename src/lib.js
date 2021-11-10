@@ -145,11 +145,19 @@ module.exports = class Worker {
    */
   nginxVersion;
 
+  /**
+   * path of custom user nginx config file
+   * with the name like domain
+   * @type {string}
+   */
+  nginxConfigDPath;
+
   constructor() {
     this.pwd = process.env.PWD;
     this.npmPackageVersion = process.env.NPM_PACKAGE_VERSION;
     this.nginxPath = process.env.NGINX_PATH || '/etc/nginx';
     this.nginxConfigPath = `${this.nginxPath}/nginx.conf`;
+    this.nginxConfigDPath = '';
     this.systemdConfigDir = '/etc/systemd/system/';
     this.domain = 'example.com';
     this.ini = '';
@@ -319,7 +327,7 @@ module.exports = class Worker {
      */
     const _data = { ...data };
     data._ini.sections.map((item) => {
-      console.log(item);
+      // console.log(item);
     });
     return data;
   }
@@ -499,16 +507,32 @@ to change run with the option:${Reset}${Bright} --renew-default`,
         );
         return 1;
       }
-      const confDPath = `${this.nginxConfigPath}/conf.d`;
-      const confDItems = fs.readdirSync(confDPath);
-      if (confDItems.length !== undefined) {
-        confDItems.map((item) => {
-          console.log(item);
-        });
-      }
     } else {
       const { http } = nginxConfig;
       const { http: _http } = _nginxConfig;
+
+      if (http !== undefined && !http.server) {
+        const confDPath = `${this.nginxPath}/conf.d`;
+        const confDItems = fs.readdirSync(confDPath);
+        if (confDItems.length !== undefined) {
+          const theSameProm = confDItems.map((item) => this.getNginxConfig(`${confDPath}/${item}`));
+          const theSame = await Promise.all(theSameProm);
+          const _theSame = theSame.map((item, index) => {
+            if (item.server) {
+              if (item.server.server_name === this.domain) {
+                this.nginxConfigDPath = `${this.nginxPath}/conf.d/${confDItems[index]}`;
+                return item.server;
+              }
+            }
+          });
+          if (_theSame) {
+            if (_theSame[0]) {
+              return _theSame[0];
+            }
+          }
+        }
+      }
+
       const keys = Object.keys(http);
       let confD = false;
       let serverC = false;
@@ -531,7 +555,6 @@ to change run with the option:${Reset}${Bright} --renew-default`,
             break;
           case 'server':
             if (typeof values.length !== 'undefined') {
-              console.log(_nginxConfig.http.server);
               const allPromises = await values.map(async (value) => {
                 if (value.server_name === this.domain) {
                   serverC = true;
@@ -540,7 +563,6 @@ to change run with the option:${Reset}${Bright} --renew-default`,
                 return value;
               });
               _nginxConfig.http.server = await Promise.all(allPromises);
-              console.log(_nginxConfig.http.server);
             } else {
               if (values !== undefined) {
                 if (values.server_name === this.domain) {
@@ -589,14 +611,16 @@ to change run with the option:${Reset}${Bright} --renew-default`,
       if (_server === 1) {
         const serverPaths = fs.readdirSync(confDPath);
         let exsists = false;
-        serverPaths.map(async (item) => {
+        const sProm = serverPaths.map((item) => {
           const confPath = path.resolve(confDPath, item);
-          const s = await this.getNginxConfig(confPath);
-          if (s !== 1) {
-            if (s.server.server_name === this.domain) {
-              exsists = true;
-              _server = s.server;
-              _serverPath = confPath;
+          return this.getNginxConfig(confPath);
+        });
+        const s = await Promise.all(sProm);
+        s.map((item, index) => {
+          if (item.server) {
+            if (item.server.server_name === this.domain) {
+              _server = item.server;
+              _serverPath = serverPaths[index];
             }
           }
         });
@@ -607,6 +631,16 @@ to change run with the option:${Reset}${Bright} --renew-default`,
       } else if (fs.existsSync(serverPath)) {
         _serverPath = serverPath;
       }
+    }
+    this.nginxConfigDPath =
+      _serverPath && this.nginxConfigDPath
+        ? this.nginxConfigDPath
+        : _serverPath
+        ? `${this.nginxPath}/conf.d/${_serverPath}`
+        : '';
+    if (!this.nginxConfigDPath) {
+      console.warn(this.warning, Yellow, `Server path `, Reset);
+      console.error(this.error, Red, 'Config path is missing', Reset);
     }
     if (!_server) {
       _server = { ...nginxTemplate.server };
@@ -648,11 +682,13 @@ to change run with the option:${Reset}${Bright} --renew-default`,
     }
     // write conf.d/*.conf file
     if (!server) {
-      if (!fs.existsSync(serverPath)) {
+      if (!fs.existsSync(serverPath) && serverPath === this.nginxConfigDPath) {
         fs.writeFileSync(serverPath, '');
       }
       parser.writeConfigFile(
-        this.prod || this.test ? _serverPath : path.resolve(__dirname, '../tmp/server.conf'),
+        this.prod || this.test
+          ? this.nginxConfigDPath
+          : path.resolve(__dirname, '../tmp/server.conf'),
         {
           server: _server,
         },

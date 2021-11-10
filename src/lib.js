@@ -36,6 +36,11 @@ module.exports = class Worker {
   pwd;
 
   /**
+   * @type {number}
+   */
+  port;
+
+  /**
    * @type {string}
    */
   packageName;
@@ -148,6 +153,7 @@ module.exports = class Worker {
     this.systemdConfigDir = '/etc/systemd/system/';
     this.domain = 'example.com';
     this.ini = '';
+    this.port = 3000;
     this.test = false;
     this.nginxVersion = '';
     this.traceWarnings = false;
@@ -313,7 +319,7 @@ module.exports = class Worker {
      */
     const _data = { ...data };
     data._ini.sections.map((item) => {
-      /**todo */
+      console.log(item);
     });
     return data;
   }
@@ -407,14 +413,6 @@ to change run with the option:${Reset}${Bright} --renew-default`,
    * @returns {Promise<string>}
    */
   async setDomain() {
-    const rl = readline.createInterface({
-      input: stdin,
-      output: stdout,
-    });
-    const { homepage } = this.packageJson();
-    const homePage = homepage
-      ? homepage.replace(/https?:\/\//, '').replace(/\//g, '')
-      : this.domain;
     if (this.traceWarnings) {
       console.warn(
         this.warning,
@@ -425,6 +423,20 @@ to change run with the option:${Reset}${Bright} --renew-default`,
         Reset
       );
     }
+    console.info(
+      this.info,
+      Bright,
+      'Make sure that hosting zone have A record with IP of this server',
+      Reset
+    );
+    const rl = readline.createInterface({
+      input: stdin,
+      output: stdout,
+    });
+    const { homepage } = this.packageJson();
+    const homePage = homepage
+      ? homepage.replace(/https?:\/\//, '').replace(/\//g, '')
+      : this.domain;
     return new Promise((resolve) => {
       rl.question(`Domain name: ${Dim} ${homePage} ${Reset}> `, (value) => {
         const _value = value || homePage;
@@ -472,9 +484,9 @@ to change run with the option:${Reset}${Bright} --renew-default`,
    *
    * @param {ReturnType<parser['readConfigFile']>} nginxConfig
    * @param {boolean} subConfig
-   * @returns {ReturnType<parser['readConfigFile']>}
+   * @returns {Promise<ReturnType<parser['readConfigFile']>>}
    */
-  createNginxFile(nginxConfig, subConfig = false) {
+  async createNginxFile(nginxConfig, subConfig = false) {
     const confDValue = 'conf.d/*.conf';
     let _nginxConfig = { ...nginxConfig };
     if (!_nginxConfig.http) {
@@ -519,18 +531,21 @@ to change run with the option:${Reset}${Bright} --renew-default`,
             break;
           case 'server':
             if (typeof values.length !== 'undefined') {
-              _nginxConfig.http.server = values.map((value) => {
+              console.log(_nginxConfig.http.server);
+              const allPromises = await values.map(async (value) => {
                 if (value.server_name === this.domain) {
                   serverC = true;
                   return this.changeNginxServerSection(value);
                 }
                 return value;
               });
+              _nginxConfig.http.server = await Promise.all(allPromises);
+              console.log(_nginxConfig.http.server);
             } else {
               if (values !== undefined) {
                 if (values.server_name === this.domain) {
                   serverC = true;
-                  _nginxConfig.http.server = this.changeNginxServerSection(values);
+                  _nginxConfig.http.server = await this.changeNginxServerSection(values);
                 }
               }
             }
@@ -549,10 +564,9 @@ to change run with the option:${Reset}${Bright} --renew-default`,
       }
       // get server config from conf.d
       if (!serverC) {
-        this.changeNginxServerSection();
+        await this.changeNginxServerSection();
       }
     }
-    _nginxConfig;
     return _nginxConfig;
   }
 
@@ -594,35 +608,58 @@ to change run with the option:${Reset}${Bright} --renew-default`,
         _serverPath = serverPath;
       }
     }
-
-    const keys = Object.keys(_server);
+    if (!_server) {
+      _server = { ...nginxTemplate.server };
+    }
+    // change nginx.http.server values
+    const keys = Object.keys(nginxTemplate.server);
     for (let i = 0; keys[i]; i++) {
       const key = keys[i];
-      const field = _server[key];
+      const field = nginxTemplate.server[key];
       let value = '';
       switch (key) {
         case 'server_name':
           value = this.domain;
+          _server[key] = value;
           break;
         case 'access_log':
-          value = `/var/log/nginx/${this.domain}.access.log`;
+          value = _server[key] || `/var/log/nginx/${this.domain}.access.log`;
+          _server[key] = value;
           break;
         case 'error_log':
-          value = `/var/log/nginx/${this.domain}.error.log`;
+          value = _server[key] || `/var/log/nginx/${this.domain}.error.log`;
+          _server[key] = value;
           break;
         case 'location /':
-          Object.keys(_server[key]).map((_key) => {
+          Object.keys(nginxTemplate.server[key]).map((_key) => {
+            if (!_server[key]) {
+              _server[key] = {};
+            }
             if (_key === 'proxy_pass') {
               _server[key][_key] = `http://localhost:${this.port}`;
+            } else {
+              _server[key][_key] = nginxTemplate.server[key][_key];
             }
           });
           break;
         default:
           value = field;
       }
-      _server[key] = value;
     }
-    // todo
+    // write conf.d/*.conf file
+    if (!server) {
+      if (!fs.existsSync(serverPath)) {
+        fs.writeFileSync(serverPath, '');
+      }
+      parser.writeConfigFile(
+        this.prod || this.test ? _serverPath : path.resolve(__dirname, '../tmp/server.conf'),
+        {
+          server: _server,
+        },
+        true
+      );
+    }
+
     return _server;
   }
 };

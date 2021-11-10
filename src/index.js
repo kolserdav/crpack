@@ -67,13 +67,15 @@ class Factory extends Worker {
    *  @type {{
    *  traceWarnings: '--trace-warnings';
    *  renewDefault: '--renew-default';
-   *  test: '--test',
+   *  test: '--test';
+   *  port: '--port';
    * }}
    */
   params = {
     traceWarnings: '--trace-warnings',
     renewDefault: '--renew-default',
     test: '--test',
+    port: '--port',
   };
 
   constructor() {
@@ -97,6 +99,7 @@ OPTIONS:
 --trace-warnings: show all warnings
 --renew-default: rewrite default cache nginx file
 --test: run in dev as prod
+--port: local application port
 
 ENVIRONMENTS:
 NGINX_PATH: [/etc/nginx]
@@ -120,7 +123,7 @@ NGINX_PATH: [/etc/nginx]
    */
   setAdditional() {
     const argv = process.argv;
-    const { traceWarnings, renewDefault, test } = this.params;
+    const { traceWarnings, renewDefault, test, port } = this.params;
     if (argv.indexOf(traceWarnings) !== -1) {
       this.traceWarnings = true;
     }
@@ -129,6 +132,24 @@ NGINX_PATH: [/etc/nginx]
     }
     if (argv.indexOf(test) !== -1) {
       this.test = true;
+    }
+    const portArg = argv.indexOf(port);
+    if (portArg !== -1) {
+      const nextArg = process.argv[portArg + 1];
+      if (!nextArg) {
+        console.warn(this.warning, Yellow, 'Port value is missing while use --port option', Reset);
+      }
+      const nextArgNum = parseInt(nextArg, 10);
+      const _isNan = Number.isNaN(nextArgNum);
+      if (_isNan) {
+        console.warn(
+          this.warning,
+          Yellow,
+          'Port value is not number. Skipping change default port',
+          Reset
+        );
+      }
+      this.port = _isNan ? this.port : nextArgNum;
     }
   }
 

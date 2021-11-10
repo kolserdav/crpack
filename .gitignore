@@ -1,5 +1,4 @@
 node_modules
 yarn-error.log
-tmp
 .crpack/*
 !.crpack/templates

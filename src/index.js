@@ -50,6 +50,12 @@ class Factory extends Worker {
    */
   renewDefault;
 
+	/**
+	 *@type {boolean}
+	 * */
+	test;
+	
+
   /**
    * Commands
    * @type {{
@@ -67,13 +73,13 @@ class Factory extends Worker {
    *  @type {{
    *  traceWarnings: '--trace-warnings';
    *  renewDefault: '--renew-default';
-   *  dev: '--dev'
+   *  test: '--test'
    * }}
    */
   params = {
     traceWarnings: '--trace-warnings',
     renewDefault: '--renew-default',
-    dev: '--dev',
+    test: '--test',
   };
 
   constructor() {
@@ -81,6 +87,7 @@ class Factory extends Worker {
     const controller = new AbortController();
     const { signal } = controller;
     const argv = process.argv;
+		this.test = false;
     this.version = `CrPack version ${this.npmPackageVersion}`;
     this.help = `
     ${this.version}
@@ -112,15 +119,16 @@ OPTIONS:
    */
   setAdditional() {
     const argv = process.argv;
-    const { traceWarnings, renewDefault, dev } = this.params;
+    const { traceWarnings, renewDefault, test } = this.params;
     if (argv.indexOf(traceWarnings) !== -1) {
       this.traceWarnings = true;
     }
     if (argv.indexOf(renewDefault) !== -1) {
       this.renewDefault = true;
     }
-    if (argv.indexOf(dev) !== -1) {
-    }
+    if (argv.indexOf(test) !== -1) {
+    	this.test = true;
+		}
   }
 
   /**
@@ -133,7 +141,7 @@ OPTIONS:
     this.nginxConfigPath = await this.setUserNginxPath();
     console.info(this.info, 'Target nginx config path:', this.nginxConfigPath);
     const nginxConfig = await this.getNginxConfig();
-    this.domain = await this.setDomain();
+		this.domain = await this.setDomain();
     console.info(this.info, 'Domain name:', this.domain);
     const _nginxConfig = { ...nginxConfig };
     if (_nginxConfig.http) {
@@ -141,12 +149,13 @@ OPTIONS:
       delete _nginxConfig.mime;
       console.warn(`Section http is missing on ${JSON.stringify(_nginxConfig)}`);
     }
-    const systemdConfig = this.getSystemConfig();
     await this.writeNginxConfig(
-      this.prod ? this.nginxConfigPath : './tmp/nginx.conf',
+      this.prod || this.test ? this.nginxConfigPath : './tmp/nginx.conf',
       _nginxConfig,
       this.packageName
     );
+    const systemdConfig = this.getSystemConfig();
+		await fs.writeFileSync(this.prod || this.test ? path.normalize(`${this.systemdConfigDir}/${this.domain}.service`) : './tmp/daemon.service', systemdConfig);
     return 0;
   }
 
@@ -170,7 +179,8 @@ OPTIONS:
         console.info(this.help);
         break;
       case this.props.start:
-        console.info(this.info, Reset, 'Started create system package script...');
+        console.log(process.env.USER)
+				console.info(this.info, Reset, 'Started create system package script...');
         await this.createPackage();
         console.info(this.info, Green, `Package ${this.domain} created successfully!`, Reset);
         break;

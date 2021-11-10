@@ -201,10 +201,6 @@ module.exports = class Worker {
       return cData;
     }
     if (cData) {
-      console.log(
-        fs.existsSync(this.cacheDefaultUserNginxConfig),
-        this.traceWarnings && !this.renewAll
-      );
       if (fs.existsSync(this.cacheDefaultUserNginxConfig) && this.traceWarnings) {
         console.warn(
           this.warning,

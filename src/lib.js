@@ -728,12 +728,13 @@ to change run with the option:${Reset}${Bright} --renew-default`,
         _serverPath = serverPath;
       }
     }
-    console.log(_serverPath);
     this.nginxConfigDPath =
       _serverPath && this.nginxConfigDPath
         ? this.nginxConfigDPath
         : _serverPath
-        ? `${this.nginxPath}/conf.d/${_serverPath}`
+        ? /^\//.test(_serverPath)
+          ? _serverPath
+          : `${this.nginxPath}/conf.d/${_serverPath}`
         : '';
     if (!this.nginxConfigDPath) {
       console.warn(this.warning, Yellow, `Server file path is ${_serverPath}`, Reset);

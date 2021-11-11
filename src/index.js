@@ -283,6 +283,11 @@ OPTIONS:
         'Make sure that all nginx config values not have newline symbols',
         Reset
       );
+      const nginxT = await this.getSpawn({
+        command: 'nginx',
+        args: ['-t'],
+      });
+      console.log(33, nginxT);
       this.writeTmpNginx();
       return 1;
     }

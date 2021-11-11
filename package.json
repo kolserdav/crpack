@@ -1,8 +1,24 @@
 {
   "name": "crpack",
   "description": "Run node.js package as systemd service",
-  "version": "1.0.20-beta",
+  "keywords": [
+    "node",
+    "node.js",
+    "package",
+    "daemon",
+    "service",
+    "nginx",
+    "run",
+    "certbot",
+    "letencrypt",
+    "ssl",
+    "https"
+  ],
+  "version": "2.0.0-alfa",
   "main": "src/index.js",
+  "engines": {
+    "node": "16.x"
+  },
   "repository": "https://github.com/kolserdav/crpack.git",
   "author": "kolserdav <serega12101983@gmail.com>",
   "license": "MIT",

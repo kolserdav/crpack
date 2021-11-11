@@ -220,7 +220,7 @@ module.exports = class Worker {
    */
   async getSpawn(props) {
     const { command, args, options, onData } = props;
-    console.info(Dim, `${command} ${args.join(' ')}`, Reset);
+    console.info(Dim, `$ ${command} ${args.join(' ')}`, Reset);
     const sh = spawn.call('sh', command, args, options || {});
     let errorData = '';
     let _data = '';
@@ -247,10 +247,12 @@ module.exports = class Worker {
         if (/AbortError/.test(err)) {
           resolve(0);
         } else {
+          console.log(22, err);
           reject(err);
         }
       });
       sh.on('close', (code) => {
+        console.log(11, errorData);
         if (errorData) {
           reject(errorData);
         }

@@ -184,6 +184,7 @@ module.exports = class Worker {
     this.npmPath = '';
     this.traceWarnings = false;
     this.renewDefault = false;
+    console.log(this.pwd);
     this.prod = path.relative(this.pwd, __dirname) !== 'src';
     this.root = this.prod ? this.pwd : './';
     this.configPath = path.resolve(this.pwd, this.root, 'package.json');

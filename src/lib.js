@@ -162,15 +162,21 @@ module.exports = class Worker {
    */
   packageJsonConfig;
 
+  /**
+   * @type {Object}
+   */
+  packageJsonSelf;
+
   constructor() {
     this.pwd = process.env.PWD;
-    this.npmPackageVersion = process.env.NPM_PACKAGE_VERSION;
+    this.npmPackageVersion;
     this.nginxPath = process.env.NGINX_PATH || '/etc/nginx';
     this.nginxConfigPath = `${this.nginxPath}/nginx.conf`;
     this.nginxConfigDPath = '';
     this.systemdConfigDir = '/etc/systemd/system/';
     this.domain = 'example.com';
     this.packageJsonConfig = {};
+    this.packageJsonSelf = {};
     this.ini = '';
     this.port = 3000;
     this.test = false;
@@ -445,6 +451,14 @@ module.exports = class Worker {
       return 1;
     }
     this.packageJsonConfig = JSON.parse(result);
+  }
+
+  /**
+   *
+   */
+  setPackageJsonSelf() {
+    const result = fs.readFileSync(path.resolve(__dirname, '../package.json')).toString();
+    this.packageJsonSelf = JSON.parse(result);
   }
 
   /**

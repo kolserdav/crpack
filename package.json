@@ -1,18 +1,18 @@
 {
   "name": "crpack",
   "description": "Run node.js package as systemd service",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "main": "src/index.js",
   "repository": "https://github.com/kolserdav/crpack.git",
   "author": "kolserdav <serega12101983@gmail.com>",
   "license": "MIT",
   "homepage": "https://crpack.uyem.ru",
   "bin": {
-    "crpack": "NPM_PACKAGE_VERSION=${npm_package_version} ./bin/crpack.js"
+    "crpack": "./bin/crpack.js"
   },
   "scripts": {
-    "bins": "NPM_PACKAGE_VERSION=${npm_package_version} ./bin/crpack.js",
-    "start": "NPM_PACKAGE_VERSION=${npm_package_version} node ${npm_package_main}",
+    "bins": "./bin/crpack.js",
+    "start": "node ${npm_package_main}",
     "dev": "nodemon ${npm_package_main}"
   },
   "devDependencies": {

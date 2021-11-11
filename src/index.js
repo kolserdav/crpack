@@ -91,8 +91,9 @@ class Factory extends Worker {
     const { signal } = controller;
     this.arg = process.argv[2];
     const argv = process.argv;
+    this.setPackageJsonSelf();
     this.disabled = false;
-    this.version = `CrPack version ${this.npmPackageVersion}`;
+    this.version = `CrPack version ${this.packageJsonSelf.version}`;
     this.help = `
     ${this.version}
 > crpack [options] <command>   
@@ -266,7 +267,6 @@ ENVIRONMENT:
         console.info(this.help);
         break;
       case this.props.run:
-        console.log(process.env.USER);
         console.info(this.info, Reset, 'Started create system package script...');
         const code = await this.createPackage();
         if (code !== 1) {

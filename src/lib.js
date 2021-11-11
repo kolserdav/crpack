@@ -247,12 +247,14 @@ module.exports = class Worker {
         if (/AbortError/.test(err)) {
           resolve(0);
         } else {
-          console.log(22, err);
           reject(err);
         }
       });
       sh.on('close', (code) => {
-        console.log(11, errorData);
+        if (/Saving debug log/.test(errorData)) {
+          console.info(this.info, Cyan, Dim, errorData, Reset);
+          resolve(0);
+        }
         if (errorData) {
           reject(errorData);
         }

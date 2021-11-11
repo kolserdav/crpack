@@ -287,7 +287,6 @@ OPTIONS:
         command: 'nginx',
         args: ['-t'],
       });
-      console.log(33, nginxT);
       this.writeTmpNginx();
       return 1;
     }

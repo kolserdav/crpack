@@ -246,6 +246,7 @@ module.exports = class Worker {
         if (/AbortError/.test(err)) {
           resolve(0);
         } else {
+          console.warn(this.warning, Yellow, _data, Reset);
           reject(err);
         }
       });

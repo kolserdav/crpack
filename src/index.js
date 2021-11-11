@@ -27,6 +27,10 @@ const Blue = '\x1b[34m';
 const Cyan = '\x1b[36m';
 const Blink = '\x1b[5m';
 
+/**
+ * @typedef {1 | 0} Result
+ */
+
 class Factory extends Worker {
   /**
    * @type {string} - current command
@@ -262,16 +266,102 @@ OPTIONS:
 
   /**
    *
-   * @returns {Promise<number>}
+   * @returns {Promise<Result>}
    */
   async createPackage() {
+    /**
+     * @type {Result}
+     */
+    let result = 0;
+
     const packageName = await this.setPackage();
     if (packageName === 1) {
-      return 1;
+      result = 1;
+    } else {
+      this.packageName = packageName;
     }
-    this.packageName = packageName;
-    this.nginxConfigPath = await this.setUserNginxPath();
-    console.info(this.info, 'Target nginx config path:', this.nginxConfigPath);
+    const nginxExists = this.fileExists(this.nginxConfigPath);
+    if (!nginxExists) {
+      console.warn(
+        this.warning,
+        Yellow,
+        'Nginx config not found in:',
+        Reset,
+        Cyan,
+        this.nginxConfigPath,
+        Reset
+      );
+    }
+    this.nginxConfigPath = nginxExists ? this.nginxConfigPath : await this.setUserNginxPath();
+
+    const setupNginx = await this.setupNginx();
+    if (setupNginx !== 0) {
+      result = 1;
+    }
+
+    const restartNginx = await this.restartNginx();
+    if (restartNginx !== 0) {
+      result = 1;
+    }
+
+    // Create ssl certificate
+    if (this.ssl) {
+      const certbot = await this.getSpawn({
+        command: this.certbotExe,
+        args: ['-d', this.domain, '--nginx'],
+      });
+      if (certbot === undefined) {
+        result = 1;
+      }
+    }
+
+    const setUpPack = await this.setupPackage();
+    if (setUpPack !== 0) {
+      result = 1;
+    }
+
+    const restartRes = await this.restartService();
+    if (restartRes !== 0) {
+      result = 1;
+    }
+
+    //// git server connection
+    const sshConfig = await git.setSshHost();
+    if (sshConfig === 1) {
+      result = 1;
+    }
+
+    const secretKeyPath = await git.setSecretKeyPath();
+    if (secretKeyPath === 1) {
+      result = 1;
+    }
+
+    const install = await git.create();
+    console.log('install', install);
+    console.info(this.info, 'Git enabled:', Blue, this.git, Reset);
+    console.info(this.info, 'SSL enabled:', Blue, this.ssl, Reset);
+    console.info(this.info, 'SSH config:', Blue, !this.git ? git.sshConfig : undefined, Reset);
+    console.info(this.info, 'Nginx config path: ', Blue, this.nginxConfigPath, Reset);
+    console.info(this.info, 'Package name:', Blue, this.packageName, Reset);
+    console.info(this.info, 'Domain name:', Blue, this.domain, Reset);
+    console.info(
+      this.info,
+      'Service config:',
+      Blue,
+      `${this.systemdConfigDir}${this.packageName}.service`,
+      Reset
+    );
+    return result;
+  }
+
+  /**
+   * @returns {Promise<Result>}
+   */
+  async setupNginx() {
+    /**
+     * @type {Result}
+     */
+    let result = 0;
     const nginxConfig = await this.getNginxConfig(this.nginxConfigPath);
     if (this.traceWarnings) {
       console.warn(
@@ -288,68 +378,86 @@ OPTIONS:
         nginxData,
         this.packageName
       );
+    } else {
+      result = 1;
     }
+    return result;
+  }
 
-    const nginxRestart = await this.getSpawn({
-      command: 'systemctl',
-      args: ['restart', 'nginx'],
-    });
-    if (nginxRestart !== 0) {
-      console.warn(
-        this.warning,
-        Yellow,
-        'Make sure that all nginx config values not have newline symbols',
-        Reset
-      );
-      const nginxT = await this.getSpawn({
-        command: 'nginx',
-        args: ['-t'],
-      });
-      this.writeTmpNginx();
+  /**
+   *
+   * @returns {Promise<Result>}
+   */
+  async setupPackage() {
+    const systemdConfig = await this.getSystemConfig();
+    if (systemdConfig === 1) {
       return 1;
     }
-
-    if (this.ssl) {
-      const certbot = await this.getSpawn({
-        command: this.certbotExe,
-        args: ['-d', this.domain, '--nginx'],
-      });
-      if (certbot === undefined) {
-        return 1;
-      }
-    }
-
-    const systemdConfig = await this.getSystemConfig();
     const systemData = this.createIniFile(systemdConfig._ini.sections);
     this.writeSystemdConfig(systemData);
 
+    /**
+     * @type {Result}
+     */
+    let result = 0;
+    if (!this.disabled) {
+      const enablePackage = await this.getSpawn({
+        command: 'systemctl',
+        args: ['enable', this.packageName],
+      });
+      if (typeof enablePackage === 'string') {
+        console.info(this.info, 'Package enabled');
+      } else if (enablePackage !== 0) {
+        result = 1;
+      }
+    } else {
+      const enablePackage = await this.getSpawn({
+        command: 'systemctl',
+        args: ['disable', this.packageName],
+      });
+      if (typeof enablePackage === 'string') {
+        console.info(this.info, 'Package disabled');
+      } else if (enablePackage !== 0) {
+        result = 1;
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * try run application before restart service
+   * @returns {Promise<Result>}
+   */
+  async restartService() {
+    /**
+     * @type {Result}
+     */
+    let result = 0;
     const daemonReload = await this.getSpawn({
       command: 'systemctl',
       args: ['daemon-reload'],
     });
     if (daemonReload !== 0) {
-      return 1;
+      result = 1;
     }
-
-    //// try run application before service restart
     const startTime = new Date().getTime();
     const controller = new AbortController();
     const { signal } = controller;
     if (!this.packageJsonConfig.scripts) {
       console.error(this.error, Red, 'Property "scripts" is missing on package.json');
-      return 1;
+      result = 1;
     }
     if (!this.packageJsonConfig.scripts.start) {
       console.error(this.error, Red, 'Property "scripts.start" is missing on package.json');
-      return 1;
+      result = 1;
     }
-
     const stopPackage = await this.getSpawn({
       command: 'systemctl',
       args: ['stop', this.packageName],
     });
     if (stopPackage !== 0) {
-      return 1;
+      result = 1;
     }
 
     const preStartPackage = await this.getSpawn({
@@ -371,10 +479,10 @@ OPTIONS:
       },
     });
     if (preStartPackage === 1) {
-      return 1;
+      result = 1;
     }
     if (preStartPackage === undefined) {
-      return 1;
+      result = 1;
     }
     if (typeof preStartPackage === 'string') {
       console.info(this.info, Blue, preStartPackage, Reset);
@@ -387,7 +495,7 @@ OPTIONS:
         `Application down after running time less than ${MINIMUM_WAIT_ABORT / 1000} second(s)`,
         Reset
       );
-      return 1;
+      result = 1;
     }
 
     const startPackage = await this.getSpawn({
@@ -395,29 +503,7 @@ OPTIONS:
       args: ['start', this.packageName],
     });
     if (startPackage !== 0) {
-      return 1;
-    }
-
-    if (!this.disabled) {
-      const enablePackage = await this.getSpawn({
-        command: 'systemctl',
-        args: ['enable', this.packageName],
-      });
-      if (typeof enablePackage === 'string') {
-        console.info(this.info, enablePackage);
-      } else if (enablePackage !== 0) {
-        return 1;
-      }
-    } else {
-      const enablePackage = await this.getSpawn({
-        command: 'systemctl',
-        args: ['disable', this.packageName],
-      });
-      if (typeof enablePackage === 'string') {
-        console.info(this.info, enablePackage);
-      } else if (enablePackage !== 0) {
-        return 1;
-      }
+      result = 1;
     }
 
     const statusPackage = await this.getSpawn({
@@ -425,44 +511,43 @@ OPTIONS:
       args: ['status', this.packageName],
     });
     if (statusPackage === 1) {
-      return 1;
+      result = 1;
     }
     if (statusPackage !== undefined) {
       console.info(this.info, Cyan, statusPackage, Reset);
     }
 
-    //// git server connection
-    const sshConfig = await git.setSshHost();
-    if (sshConfig === 1) {
+    return result;
+  }
+
+  /**
+   *
+   * @returns {Promise<Result>}
+   */
+  async restartNginx() {
+    /**
+     * @type {Result}
+     */
+    let result = 0;
+    const nginxRestart = await this.getSpawn({
+      command: 'systemctl',
+      args: ['restart', 'nginx'],
+    });
+    if (nginxRestart !== 0) {
+      console.warn(
+        this.warning,
+        Yellow,
+        'Make sure that all nginx config values not have newline symbols',
+        Reset
+      );
+      this.writeTmpNginx();
       return 1;
     }
-
-    const secretKeyPath = await git.setSecretKeyPath();
-    if (secretKeyPath === 1) {
-      return 1;
-    }
-
-    const install = await git.create();
-    console.log('install', install);
-
-    console.info(this.info, 'Package name:', Blue, this.packageName, Reset);
-    console.info(this.info, 'Domain name:', Blue, this.domain, Reset);
-    console.info(
-      this.info,
-      'Nginx config:',
-      Blue,
-      this.nginxConfigDPath || this.nginxConfigPath,
-      Reset
-    );
-    console.info(
-      this.info,
-      'Service config:',
-      Blue,
-      `${this.systemdConfigDir}${this.packageName}.service`,
-      Reset
-    );
-
-    return 0;
+    await this.getSpawn({
+      command: 'nginx',
+      args: ['-t'],
+    });
+    return result;
   }
 
   /**

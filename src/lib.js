@@ -29,8 +29,10 @@ const Cyan = '\x1b[36m';
 const Dim = '\x1b[2m';
 
 /**
+ * @typedef {1 | 0} Result
  * @typedef {1 | string} ResultString;
  * @typedef {1 | void} ResultVoid;
+ * @typedef {1 | 0 | string | undefined} ResultUndefined;
  */
 
 module.exports = class Worker {
@@ -218,7 +220,7 @@ module.exports = class Worker {
   /**
    * Run spawn command
    * @param {{ command: string, args: string[], options?: any, onData?: () => void }} props
-   * @returns {Promise<any>}
+   * @returns {Promise<ResultUndefined>}
    */
   async getSpawn(props) {
     const { command, args, options, onData } = props;
@@ -268,9 +270,15 @@ module.exports = class Worker {
       });
     }).catch((e) => {
       if (!/AbortError/.test(e)) {
-        console.warn(this.warning, Yellow, errorData, Reset);
+        if (command !== 'nginx' && args[0] !== '-t' && /\.conf syntax is ok/.test(e)) {
+          console.warn(this.warning, Yellow, errorData, Reset);
+        } else {
+          console.info(this.info, Cyan, errorData, Reset);
+        }
         console.info(this.info, Cyan, _data, Reset);
-        console.error(this.error, `Run command ${command} end with error`, Red, e, Reset);
+        if (command !== 'nginx' && args[0] !== '-t' && /\.conf syntax is ok/.test(e)) {
+          console.error(this.error, `Run command ${command} end with error`, Red, e, Reset);
+        }
       }
     });
   }
@@ -311,7 +319,7 @@ module.exports = class Worker {
   }
 
   /**
-   *
+   * @returns {Promise<Result>}
    */
   async setNginxVersion() {
     const command = 'nginx';
@@ -323,8 +331,14 @@ module.exports = class Worker {
     }).catch((e) => {
       console.error(this.error, `Error ${command} ${args.join(' ')}`);
     });
-    const nginxV = nginxRes.match(this.nginxRegex);
-    this.nginxVersion = nginxV ? nginxV[0] : null;
+    if (nginxRes === 1) {
+      return 1;
+    }
+    if (typeof nginxRes === 'string') {
+      const nginxV = nginxRes.match(this.nginxRegex);
+      this.nginxVersion = nginxV ? nginxV[0] : null;
+    }
+    return 0;
   }
 
   /**
@@ -334,7 +348,10 @@ module.exports = class Worker {
    */
   async getNginxConfig(configPath) {
     if (!this.nginxVersion) {
-      await this.setNginxVersion();
+      const nginxV = await this.setNginxVersion();
+      if (nginxV === 1) {
+        return 1;
+      }
       console.info(this.info, `Nginx version: ${this.nginxVersion}`);
     }
     if (!this.nginxVersion) {
@@ -376,17 +393,20 @@ module.exports = class Worker {
    */
 
   /**
-   *
-   * @returns {Promise<Ini>}
+   * @typedef {1 | Ini} IniErr
+   * @returns {Promise<IniErr>}
    */
   async getSystemConfig() {
     const npmPath = await this.getSpawn({
       command: 'which',
       args: ['npm'],
-    }).catch(() => {
-      return 1;
     });
-    this.npmPath = path.normalize(npmPath.replace(/\/npm/, '')).replace(/\n/, '');
+    if (npmPath === 1) {
+      return 1;
+    }
+    if (typeof npmPath === 'string') {
+      this.npmPath = path.normalize(npmPath.replace(/\/npm/, '')).replace(/\n/, '');
+    }
 
     const iniContent = fs.readFileSync(this.templateSystemdConfig).toString();
     /**
@@ -913,5 +933,39 @@ to change run with the option:${Reset}${Bright} --renew-default`,
       console.error(this.error, Red, 'Error write file', Reset, e);
     }
     return result;
+  }
+
+  /**
+   *
+   * @param {string | string[]} dirPath
+   */
+  createDir(dirPath) {
+    let result = 0;
+    if (typeof dirPath === 'string') {
+      try {
+        if (!this.fileExists(dirPath)) {
+          fs.mkdirSync(dirPath);
+        }
+      } catch (e) {
+        console.error(this.error, Red, 'Error create dir', Reset, e);
+        result = 1;
+      }
+      return result;
+    }
+    const _result = dirPath.map((_dirPath) => {
+      try {
+        if (!this.fileExists(_dirPath)) {
+          fs.mkdirSync(_dirPath);
+        }
+      } catch (e) {
+        console.error(this.error, Red, 'Error create dir', Reset, e);
+        return 1;
+      }
+      return 0;
+    });
+    const resArr = _result.filter((item) => (item === 1 ? item : undefined));
+    if (resArr.length !== 0) {
+      return 1;
+    }
   }
 };

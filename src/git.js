@@ -173,17 +173,19 @@ module.exports = class Employer {
    */
   async create() {
     const config = this.changeConfig();
-    if (this.configExists) {
-      const writeRes = worker.writeFile(this.sshConfig, this.stringigyConfig(config));
-      if (writeRes === 1) {
-        return 1;
-      }
-      console.info(worker.info, 'File changed:', Cyan, this.sshConfig, Reset);
-    } else {
-      ///
+    if (!this.configExists) {
+      worker.createDir([
+        `${this.sshConfig.replace(/\/.ssh\/config$/, '')}`,
+        `${this.sshConfig.replace(/\/config$/, '')}`,
+      ]);
+    }
+    const writeRes = worker.writeFile(this.sshConfig, this.stringigyConfig(config));
+    if (writeRes === 1) {
+      return 1;
     }
 
-    console.log(11, 1);
+    //
+
     return 0;
   }
 

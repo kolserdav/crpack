@@ -168,7 +168,7 @@ module.exports = class Worker {
   packageJsonSelf;
 
   constructor() {
-    this.pwd = process.env.PWD;
+    this.pwd = process.cwd();
     this.npmPackageVersion;
     this.nginxPath = process.env.NGINX_PATH || '/etc/nginx';
     this.nginxConfigPath = `${this.nginxPath}/nginx.conf`;
@@ -184,7 +184,6 @@ module.exports = class Worker {
     this.npmPath = '';
     this.traceWarnings = false;
     this.renewDefault = false;
-    console.log(process.env);
     this.prod = path.relative(this.pwd, __dirname) !== 'src';
     this.root = this.prod ? this.pwd : './';
     this.configPath = path.resolve(this.pwd, this.root, 'package.json');

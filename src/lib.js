@@ -610,6 +610,7 @@ to change run with the option:${Reset}${Bright} --renew-default`,
       if (http !== undefined && !http.server) {
         const confDPath = `${this.nginxPath}/conf.d`;
         const confDItems = fs.readdirSync(confDPath);
+        console.log(confDItems);
         if (confDItems.length !== undefined) {
           const theSameProm = confDItems.map((item) => this.getNginxConfig(`${confDPath}/${item}`));
           const theSame = await Promise.all(theSameProm);

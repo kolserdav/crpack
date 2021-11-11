@@ -1,19 +1,19 @@
 [Unit]
-Description="Documentor application"
-After=mysqld.service
+Description="CrPack application"
+After=nginx.service
 
 [Service]
 Restart=always
 RestartSec=5
 StandardOutput=syslog
 TimeoutSec=90
-User=klyuchnik
-Group=klyuchnik
-Environment=PATH=/usr/bin:/usr/local/bin:/home/klyuchnik/.nvm/versions/node/v14.17.6/bin
+User=root
+Group=root
+Environment=PATH=/usr/bin:/usr/local/bin
 Environment=NODE_ENV=production
-WorkingDirectory=/usr/local/share/applications/documentor
-ExecStart=/home/klyuchnik/.nvm/versions/node/v14.17.6/bin/npm run test
-SyslogIdentifier=documentor
+WorkingDirectory=/usr/local/share/applications/crpack
+ExecStart=/home/root/.nvm/versions/node/v16.10.0/bin/npm run test
+SyslogIdentifier=crpack
 LimitNOFILE=4096
 IgnoreSIGPIPE=false
 KillMode=process

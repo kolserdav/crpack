@@ -152,6 +152,16 @@ module.exports = class Worker {
    */
   nginxConfigDPath;
 
+  /**
+   * @type {string}
+   */
+  npmPath;
+
+  /**
+   * @type {Object}
+   */
+  packageJsonConfig;
+
   constructor() {
     this.pwd = process.env.PWD;
     this.npmPackageVersion = process.env.NPM_PACKAGE_VERSION;
@@ -160,10 +170,12 @@ module.exports = class Worker {
     this.nginxConfigDPath = '';
     this.systemdConfigDir = '/etc/systemd/system/';
     this.domain = 'example.com';
+    this.packageJsonConfig = {};
     this.ini = '';
     this.port = 3000;
     this.test = false;
     this.nginxVersion = '';
+    this.npmPath = '';
     this.traceWarnings = false;
     this.renewDefault = false;
     this.prod = path.relative(this.pwd, __dirname) !== 'src';
@@ -190,23 +202,25 @@ module.exports = class Worker {
     const { command, args, options } = props;
     console.info(Dim, `${command} ${args.join(' ')}`, Reset);
     const sh = spawn.call('sh', command, args, options || {});
-    sh.stdout.pipe(process.stdout);
     return await new Promise((resolve, reject) => {
       sh.stdout?.on('data', (data) => {
         const str = data.toString();
-        console.log(12, `\r\r${str}`);
+        resolve(str);
       });
       sh.stderr?.on('data', (err) => {
         const str = err.toString();
         if (command === 'nginx' && this.nginxRegex.test(str)) {
           resolve(str);
+        } else if (command === 'systemctl' && (args[0] === 'enable' || args[0] === 'disable')) {
+          resolve(str);
         } else {
-          console.error(`Error run command ${command}`, Red, str, Reset);
+          console.error(this.error, `Run command return with error ${command}`, Red, str, Reset);
           reject(str);
         }
       });
       sh.on('error', (err) => {
-        console.log(11, err);
+        console.error(this.error, `Run command error ${command}`, err);
+        reject(err);
       });
       sh.on('close', (code) => {
         resolve(code);
@@ -308,10 +322,18 @@ module.exports = class Worker {
 
   /**
    *
-   * @returns {Ini}
+   * @returns {Promise<Ini>}
    */
-  getSystemConfig() {
-    const fileName = `${this.systemdConfigDir}${this.domain}.service`;
+  async getSystemConfig() {
+    const npmPath = await this.getSpawn({
+      command: 'which',
+      args: ['npm'],
+    }).catch(() => {
+      return 1;
+    });
+    this.npmPath = path.normalize(npmPath.replace(/\/npm/, '')).replace(/\n/, '');
+
+    const fileName = `${this.systemdConfigDir}${this.packageName}.service`;
     let iniContent;
     if (fs.existsSync(fileName)) {
       iniContent = fs.readFileSync(fileName).toString();
@@ -326,10 +348,67 @@ module.exports = class Worker {
      * @type {Ini}
      */
     const _data = { ...data };
-    data._ini.sections.map((item) => {
-      // console.log(item);
-    });
-    return data;
+
+    _data._ini.sections = data._ini.sections.map((item) => this.changeSystemdItem(item));
+    return _data;
+  }
+
+  /**
+   *
+   * @param {Object} item
+   * @returns {Object}
+   */
+  restartChangeSystemdItem(item) {
+    const { name, options } = item;
+    return {
+      name,
+      options: options.map((_item) => this.changeSystemdItem(_item)),
+    };
+  }
+
+  /**
+   *
+   * @param {Object} item
+   */
+  changeSystemdItem(item) {
+    const _item = { ...item };
+    const { name, value } = item;
+    switch (name) {
+      case 'Unit':
+        return this.restartChangeSystemdItem(item);
+      case 'Service':
+        return this.restartChangeSystemdItem(item);
+      case 'Install':
+        return this.restartChangeSystemdItem(item);
+      case 'Description':
+        if (!this.packageJsonConfig.description && this.traceWarnings) {
+          console.warn(
+            this.warning,
+            Yellow,
+            `Property description is missing in package.json ${Reset}`
+          );
+        }
+        _item.value =
+          this.packageJsonConfig.description || `CrPack application ${this.packageName}`;
+        break;
+      case 'Environment':
+        if (/^PATH/.test(value)) {
+          const clearItem = _item.value.replace(`:${this.npmPath}`, '');
+          _item.value = `${clearItem}:${this.npmPath}`;
+        } else if (/^NODE_ENV/.test(value)) {
+          _item.value = `NODE_ENV=${process.env.NODE_ENV || 'production'}`;
+        }
+        break;
+      case 'WorkingDirectory':
+        _item.value = this.pwd;
+        break;
+      case 'ExecStart':
+        _item.value = `${this.npmPath}/npm run start`;
+        break;
+      case 'SyslogIdentifier':
+        _item.value = this.packageName;
+    }
+    return _item;
   }
 
   /**
@@ -355,10 +434,9 @@ module.exports = class Worker {
   }
 
   /**
-   * return package.json config
-   * @returns {Object | 1}
+   * set package.json config
    */
-  packageJson() {
+  setPackageJson() {
     let result;
     try {
       result = fs.readFileSync(this.configPath).toString();
@@ -366,7 +444,7 @@ module.exports = class Worker {
       console.error(this.error, Red, `${this.configPath} not found `, Reset);
       return 1;
     }
-    return JSON.parse(result);
+    this.packageJsonConfig = JSON.parse(result);
   }
 
   /**
@@ -374,11 +452,12 @@ module.exports = class Worker {
    * @returns {Promise<string>}
    */
   async setPackage() {
+    this.setPackageJson();
     const rl = readline.createInterface({
       input: stdin,
       output: stdout,
     });
-    const { name } = this.packageJson();
+    const { name } = this.packageJsonConfig;
     return new Promise((resolve) => {
       rl.question(`Package name: ${Dim} ${name} ${Reset}> `, (value) => {
         this.packageName = value || name || this.packageName;
@@ -441,7 +520,7 @@ to change run with the option:${Reset}${Bright} --renew-default`,
       input: stdin,
       output: stdout,
     });
-    const { homepage } = this.packageJson();
+    const { homepage } = this.packageJsonConfig;
     const homePage = homepage
       ? homepage.replace(/https?:\/\//, '').replace(/\//g, '')
       : this.domain;
@@ -482,7 +561,7 @@ to change run with the option:${Reset}${Bright} --renew-default`,
   writeSystemdConfig(data) {
     fs.writeFileSync(
       this.prod || this.test
-        ? path.normalize(`${this.systemdConfigDir}/${this.domain}.service`)
+        ? path.normalize(`${this.systemdConfigDir}/${this.packageName}.service`)
         : './tmp/daemon.service',
       data
     );
@@ -632,6 +711,7 @@ to change run with the option:${Reset}${Bright} --renew-default`,
         _serverPath = serverPath;
       }
     }
+
     this.nginxConfigDPath =
       _serverPath && this.nginxConfigDPath
         ? this.nginxConfigDPath
@@ -639,9 +719,11 @@ to change run with the option:${Reset}${Bright} --renew-default`,
         ? `${this.nginxPath}/conf.d/${_serverPath}`
         : '';
     if (!this.nginxConfigDPath) {
-      console.warn(this.warning, Yellow, `Server path `, Reset);
+      console.warn(this.warning, Yellow, `Server file path is ${_serverPath}`, Reset);
       console.error(this.error, Red, 'Config path is missing', Reset);
+      return 1;
     }
+
     if (!_server) {
       _server = { ...nginxTemplate.server };
     }
@@ -657,11 +739,11 @@ to change run with the option:${Reset}${Bright} --renew-default`,
           _server[key] = value;
           break;
         case 'access_log':
-          value = _server[key] || `/var/log/nginx/${this.domain}.access.log`;
+          value = `/var/log/nginx/${this.domain}.access.log`;
           _server[key] = value;
           break;
         case 'error_log':
-          value = _server[key] || `/var/log/nginx/${this.domain}.error.log`;
+          value = `/var/log/nginx/${this.domain}.error.log`;
           _server[key] = value;
           break;
         case 'location /':

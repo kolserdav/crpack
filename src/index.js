@@ -51,6 +51,11 @@ class Factory extends Worker {
   renewDefault;
 
   /**
+   * @type {boolean}
+   */
+  disabled;
+
+  /**
    * Commands
    * @type {{
    *  showDefault: 'show-default';
@@ -69,6 +74,7 @@ class Factory extends Worker {
    *  renewDefault: '--renew-default';
    *  test: '--test';
    *  port: '--port';
+   *  disabled: '--disabled';
    * }}
    */
   params = {
@@ -76,6 +82,7 @@ class Factory extends Worker {
     renewDefault: '--renew-default',
     test: '--test',
     port: '--port',
+    disabled: '--disabled',
   };
 
   constructor() {
@@ -84,25 +91,28 @@ class Factory extends Worker {
     const { signal } = controller;
     this.arg = process.argv[2];
     const argv = process.argv;
+    this.disabled = false;
     this.version = `CrPack version ${this.npmPackageVersion}`;
     this.help = `
     ${this.version}
 > crpack [options] <command>   
 
 COMMANDS:
-run: start create package script
-show-default: show default nginx config
+  run: start create package script
+  show-default: show default nginx config
 
 OPTIONS:
--h | --help: show this man 
--v | --version: show CrPack version
---trace-warnings: show all warnings
---renew-default: rewrite default cache nginx file
---test: run in dev as prod
---port: local application port
+  -h | --help: show this man 
+  -v | --version: show CrPack version
+  --trace-warnings: show all warnings
+  --renew-default: rewrite default cache nginx file
+  --test: run in dev as prod
+  --port: local application port
+  --disabled: don't add package to autorun 
 
-ENVIRONMENTS:
-NGINX_PATH: [/etc/nginx]
+ENVIRONMENT:
+  NGINX_PATH: [/etc/nginx]
+  NODE_ENV: [production]
   `;
     const { showDefault, run } = this.props;
 
@@ -123,7 +133,7 @@ NGINX_PATH: [/etc/nginx]
    */
   setAdditional() {
     const argv = process.argv;
-    const { traceWarnings, renewDefault, test, port } = this.params;
+    const { traceWarnings, renewDefault, test, port, disabled } = this.params;
     if (argv.indexOf(traceWarnings) !== -1) {
       this.traceWarnings = true;
     }
@@ -132,6 +142,9 @@ NGINX_PATH: [/etc/nginx]
     }
     if (argv.indexOf(test) !== -1) {
       this.test = true;
+    }
+    if (argv.indexOf(disabled) !== -1) {
+      this.disabled = true;
     }
     const portArg = argv.indexOf(port);
     if (portArg !== -1) {
@@ -180,9 +193,56 @@ NGINX_PATH: [/etc/nginx]
         this.packageName
       );
     }
-    const systemdConfig = this.getSystemConfig();
+    const systemdConfig = await this.getSystemConfig();
     const systemData = this.createIniFile(systemdConfig._ini.sections);
     this.writeSystemdConfig(systemData);
+
+    const daemonReload = await this.getSpawn({
+      command: 'systemctl',
+      args: ['daemon-reload'],
+    });
+    if (daemonReload !== 0) {
+      return 1;
+    }
+
+    const startPackage = await this.getSpawn({
+      command: 'systemctl',
+      args: ['restart', this.packageName],
+    });
+    if (startPackage !== 0) {
+      return 1;
+    }
+
+    if (!this.disabled) {
+      const enablePackage = await this.getSpawn({
+        command: 'systemctl',
+        args: ['enable', this.packageName],
+      });
+      if (typeof enablePackage === 'string') {
+        console.info(this.info, enablePackage);
+      } else if (enablePackage !== 0) {
+        return 1;
+      }
+    } else {
+      const enablePackage = await this.getSpawn({
+        command: 'systemctl',
+        args: ['disable', this.packageName],
+      });
+      if (typeof enablePackage === 'string') {
+        console.info(this.info, enablePackage);
+      } else if (enablePackage !== 0) {
+        return 1;
+      }
+    }
+
+    const statusPackage = await this.getSpawn({
+      command: 'systemctl',
+      args: ['status', this.packageName],
+    });
+    if (statusPackage !== undefined) {
+      console.info(this.info, Dim, statusPackage, Reset);
+    }
+
     return 0;
   }
 
@@ -208,8 +268,12 @@ NGINX_PATH: [/etc/nginx]
       case this.props.run:
         console.log(process.env.USER);
         console.info(this.info, Reset, 'Started create system package script...');
-        await this.createPackage();
-        console.info(this.info, Green, `Package ${this.domain} created successfully!`, Reset);
+        const code = await this.createPackage();
+        if (code !== 1) {
+          console.info(this.info, Green, `Package ${this.domain} created successfully!`, Reset);
+        } else {
+          console.warn(this.warning, Yellow, 'Create package return error');
+        }
         break;
       case '-v':
         console.info(this.version);

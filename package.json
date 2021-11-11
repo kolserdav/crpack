@@ -1,6 +1,6 @@
 {
   "name": "crpack",
-  "version": "2.0.2",
+  "version": "2.0.3",
   "description": "Run node.js package as systemd service",
   "keywords": [
     "node",
@@ -17,7 +17,7 @@
   ],
   "main": "src/index.js",
   "engines": {
-    "node": "^16.x"
+    "node": ">=16.10.0"
   },
   "repository": "https://github.com/kolserdav/crpack.git",
   "author": "kolserdav <serega12101983@gmail.com>",

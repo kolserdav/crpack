@@ -1,5 +1,6 @@
 {
   "name": "crpack",
+  "version": "2.0.2",
   "description": "Run node.js package as systemd service",
   "keywords": [
     "node",
@@ -14,7 +15,6 @@
     "ssl",
     "https"
   ],
-  "version": "2.0.1-alfa",
   "main": "src/index.js",
   "engines": {
     "node": "^16.x"

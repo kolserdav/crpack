@@ -14,10 +14,10 @@
     "ssl",
     "https"
   ],
-  "version": "2.0.0-alfa",
+  "version": "2.0.1-alfa",
   "main": "src/index.js",
   "engines": {
-    "node": "16.x"
+    "node": "^16.x"
   },
   "repository": "https://github.com/kolserdav/crpack.git",
   "author": "kolserdav <serega12101983@gmail.com>",

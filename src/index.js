@@ -18,6 +18,7 @@ const Yellow = '\x1b[33m';
 const Green = '\x1b[32m';
 const Dim = '\x1b[2m';
 const Blue = '\x1b[34m';
+const Cyan = '\x1b[36m';
 const Blink = '\x1b[5m';
 
 class Factory extends Worker {
@@ -205,7 +206,6 @@ OPTIONS:
       return 1;
     }
     this.packageName = packageName;
-    console.info(this.info, 'Package name:', this.packageName);
     this.nginxConfigPath = await this.setUserNginxPath();
     console.info(this.info, 'Target nginx config path:', this.nginxConfigPath);
     const nginxConfig = await this.getNginxConfig(this.nginxConfigPath);
@@ -217,7 +217,6 @@ OPTIONS:
       );
     }
     this.domain = await this.setDomain();
-    console.info(this.info, 'Domain name:', this.domain);
     const nginxData = await this.createNginxFile(nginxConfig);
     if (nginxData !== 1) {
       await this.writeNginxConfig(
@@ -226,6 +225,15 @@ OPTIONS:
         this.packageName
       );
     }
+
+    const nginxRestart = await this.getSpawn({
+      command: 'systemctl',
+      args: ['restart', 'nginx'],
+    });
+    if (nginxRestart !== 0) {
+      return 1;
+    }
+
     const systemdConfig = await this.getSystemConfig();
     const systemData = this.createIniFile(systemdConfig._ini.sections);
     this.writeSystemdConfig(systemData);
@@ -241,7 +249,6 @@ OPTIONS:
     const startTime = new Date().getTime();
     const controller = new AbortController();
     const { signal } = controller;
-    const nodeExe = `${this.npmPath}/node`;
     if (!this.packageJsonConfig.scripts) {
       console.error(this.error, Red, 'Property "scripts" is missing on package.json');
       return 1;
@@ -332,8 +339,25 @@ OPTIONS:
       args: ['status', this.packageName],
     });
     if (statusPackage !== undefined) {
-      console.info(this.info, Dim, statusPackage, Reset);
+      console.info(this.info, Cyan, statusPackage, Reset);
     }
+
+    console.info(this.info, 'Package name:', Blue, this.packageName, Reset);
+    console.info(this.info, 'Domain name:', Blue, this.domain, Reset);
+    console.info(
+      this.info,
+      'Nginx config:',
+      Blue,
+      this.nginxConfigDPath || this.nginxConfigPath,
+      Reset
+    );
+    console.info(
+      this.info,
+      'Service config:',
+      Blue,
+      `${this.systemdConfigDir}${this.packageName}.service`,
+      Reset
+    );
 
     return 0;
   }
@@ -342,7 +366,6 @@ OPTIONS:
    * Commands map
    */
   async run() {
-    let pName;
     switch (this.arg) {
       case this.props.showDefault:
         const result = await this.getSpawn({

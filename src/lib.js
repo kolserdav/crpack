@@ -752,7 +752,7 @@ to change run with the option:${Reset}${Bright} --renew-default`,
         ? /^\//.test(_serverPath)
           ? _serverPath
           : `${this.nginxPath}/conf.d/${_serverPath}`
-        : '';
+        : this.nginxConfigPath;
     if (!this.nginxConfigDPath) {
       console.warn(this.warning, Yellow, `Server file path is ${_serverPath}`, Reset);
       console.error(this.error, Red, 'Config path is missing', Reset);

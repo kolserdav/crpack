@@ -49,6 +49,11 @@ module.exports = class Worker {
   /**
    * @type {string}
    */
+  nginxTmpPath;
+
+  /**
+   * @type {string}
+   */
   domain;
 
   /**
@@ -195,6 +200,7 @@ module.exports = class Worker {
     this.root = this.prod ? this.pwd : './';
     this.configPath = path.resolve(this.pwd, this.root, 'package.json');
     this.cacheDefaultUserNginxConfig = path.resolve(__dirname, '../.crpack/nginx.conf');
+    this.nginxTmpPath = path.resolve(__dirname, '../.crpack/.nginx.conf');
     this.templateSystemdConfig = path.resolve(
       __dirname,
       '../.crpack/templates/systemd/daemon.service'
@@ -240,7 +246,6 @@ module.exports = class Worker {
         if (/AbortError/.test(err)) {
           resolve(0);
         } else {
-          console.error(this.error, `Run command error ${command}`, err);
           reject(err);
         }
       });
@@ -278,6 +283,7 @@ module.exports = class Worker {
       if (!fs.existsSync(this.cacheDefaultUserNginxConfig) || this.renewDefault) {
         fs.writeFileSync(this.cacheDefaultUserNginxConfig, cData);
       }
+      fs.writeFileSync(this.nginxTmpPath, cData);
     }
     return cData;
   }
@@ -703,6 +709,40 @@ to change run with the option:${Reset}${Bright} --renew-default`,
       }
     }
     return _nginxConfig;
+  }
+
+  /**
+   *
+   * @returns {number | string}
+   */
+  getTmpNginx() {
+    let result;
+    try {
+      result = fs.readFileSync(this.nginxTmpPath).toString();
+    } catch (e) {
+      console.error(this.error, e);
+      result = 1;
+    }
+    return result;
+  }
+
+  /**
+   *
+   * @returns {number}
+   */
+  writeTmpNginx() {
+    let result = 0;
+    const data = this.getTmpNginx();
+    if (typeof data !== 'string') {
+      return 1;
+    }
+    try {
+      fs.writeFileSync(this.nginxConfigPath, data);
+    } catch (e) {
+      console.error(this.error, e);
+      result = 1;
+    }
+    return result;
   }
 
   /**

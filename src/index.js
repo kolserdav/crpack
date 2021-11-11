@@ -9,6 +9,7 @@
  ******************************************************************************************/
 // @ts-check
 
+const { fstat } = require('fs');
 const Worker = require('./lib');
 
 const Red = '\x1b[31m';
@@ -26,6 +27,11 @@ class Factory extends Worker {
    * @type {string} - current command
    */
   arg;
+
+  /**
+   * @type {boolean}
+   */
+  ssl;
 
   /**
    * @type {string} - name of package
@@ -70,6 +76,11 @@ class Factory extends Worker {
   };
 
   /**
+   * @type {string}
+   */
+  certbotExe;
+
+  /**
    * Parameters
    *  @type {{
    *  traceWarnings: '--trace-warnings';
@@ -78,7 +89,9 @@ class Factory extends Worker {
    *  port: '--port';
    *  disabled: '--disabled';
    *  nginxPath: '--nginx-path';
-   *   nodeEnv: '--node-env';
+   *  nodeEnv: '--node-env';
+   *  certbotPath: '--certbot-path';
+   *  ssl: '--ssl';
    * }}
    */
   params = {
@@ -89,12 +102,16 @@ class Factory extends Worker {
     disabled: '--disabled',
     nginxPath: '--nginx-path',
     nodeEnv: '--node-env',
+    certbotPath: '--certbot-path',
+    ssl: '--ssl',
   };
 
   constructor() {
     super();
     this.arg = process.argv[2];
+    this.ssl = false;
     const argv = process.argv;
+    this.certbotExe = '/snap/bin/certbot';
     this.setPackageJsonSelf();
     this.disabled = false;
     this.version = `CrPack version: ${this.packageJsonSelf.version}`;
@@ -116,6 +133,7 @@ OPTIONS:
   --disabled: don't add package to autorun
   --node-env: application NODE_ENV
   --nginx-path: nginx path  
+  --ssl: create certificate with certbot
   `;
     const { showDefault, run } = this.props;
 
@@ -136,9 +154,22 @@ OPTIONS:
    */
   setAdditional() {
     const argv = process.argv;
-    const { traceWarnings, renewDefault, test, port, disabled, nginxPath, nodeEnv } = this.params;
+    const {
+      traceWarnings,
+      renewDefault,
+      test,
+      port,
+      disabled,
+      nginxPath,
+      nodeEnv,
+      certbotPath,
+      ssl,
+    } = this.params;
     if (argv.indexOf(traceWarnings) !== -1) {
       this.traceWarnings = true;
+    }
+    if (argv.indexOf(ssl) !== -1) {
+      this.ssl = true;
     }
     if (argv.indexOf(renewDefault) !== -1) {
       this.renewDefault = true;
@@ -167,6 +198,7 @@ OPTIONS:
       }
       this.port = _isNan ? this.port : nextArgNum;
     }
+
     const nodeEnvArg = argv.indexOf(nodeEnv);
     if (nodeEnvArg !== -1) {
       const nextArg = process.argv[nodeEnvArg + 1];
@@ -179,6 +211,20 @@ OPTIONS:
         );
       }
       this.nodeEnv = nextArg ? nextArg : this.nodeEnv;
+    }
+
+    const certbotPathArg = argv.indexOf(certbotPath);
+    if (certbotPathArg !== -1) {
+      const nextArg = process.argv[certbotPathArg + 1];
+      if (!nextArg) {
+        console.warn(
+          this.warning,
+          Yellow,
+          'Certbot path value is missing while use --certbot-path option',
+          Reset
+        );
+      }
+      this.certbotExe = nextArg ? nextArg : this.certbotExe;
     }
 
     const nginxPathArg = argv.indexOf(nginxPath);
@@ -231,7 +277,24 @@ OPTIONS:
       args: ['restart', 'nginx'],
     });
     if (nginxRestart !== 0) {
+      console.warn(
+        this.warning,
+        Yellow,
+        'Make sure that all nginx config values not have newline symbols',
+        Reset
+      );
+      this.writeTmpNginx();
       return 1;
+    }
+
+    if (this.ssl) {
+      const certbot = await this.getSpawn({
+        command: this.certbotExe,
+        args: ['-d', this.domain, '--nginx'],
+      });
+      if (certbot === undefined) {
+        return 1;
+      }
     }
 
     const systemdConfig = await this.getSystemConfig();

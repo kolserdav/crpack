@@ -1,0 +1,6 @@
+.crpack/nginx.conf
+tmp
+.vscode
+.prettierc
+declarations.d.ts
+yarn-error.log

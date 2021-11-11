@@ -12,9 +12,10 @@ linux + systemd
 
 Dependencies:
 
-```
-nginx
-certbot
+```d
+nginx          // latest
+certbot        // latest
+node           // >=15.0.0 (used AbortController)
 ```
 
 Additionals:

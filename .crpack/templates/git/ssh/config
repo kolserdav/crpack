@@ -1,0 +1,4 @@
+Host gitlab.com
+    Hostname gitlab.com
+    IdentityFile /home/root/.ssh/gitlab
+    IdentitiesOnly yes

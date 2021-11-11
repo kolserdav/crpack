@@ -26,10 +26,12 @@ const Reset = '\x1b[0m';
 const Bright = '\x1b[1m';
 const Yellow = '\x1b[33m';
 const Cyan = '\x1b[36m';
-const Green = '\x1b[32m';
 const Dim = '\x1b[2m';
-const Blue = '\x1b[34m';
-const Blink = '\x1b[5m';
+
+/**
+ * @typedef {1 | string} ResultString;
+ * @typedef {1 | void} ResultVoid;
+ */
 
 module.exports = class Worker {
   /**
@@ -291,12 +293,21 @@ module.exports = class Worker {
       return cData;
     }
     if (cData) {
-      if (!fs.existsSync(this.cacheDefaultUserNginxConfig) || this.renewDefault) {
-        fs.writeFileSync(this.cacheDefaultUserNginxConfig, cData);
+      if (!this.fileExists(this.cacheDefaultUserNginxConfig) || this.renewDefault) {
+        this.writeFile(this.cacheDefaultUserNginxConfig, cData);
       }
-      fs.writeFileSync(this.nginxTmpPath, cData);
+      this.writeFile(this.nginxTmpPath, cData);
     }
     return cData;
+  }
+
+  /**
+   *
+   * @param {string} filePath
+   * @returns {boolean}
+   */
+  fileExists(filePath) {
+    return fs.existsSync(filePath);
   }
 
   /**
@@ -610,7 +621,7 @@ to change run with the option:${Reset}${Bright} --renew-default`,
    * @param {string} data
    */
   writeSystemdConfig(data) {
-    fs.writeFileSync(
+    this.writeFile(
       this.prod || this.test
         ? path.normalize(`${this.systemdConfigDir}/${this.packageName}.service`)
         : './tmp/daemon.service',
@@ -850,8 +861,8 @@ to change run with the option:${Reset}${Bright} --renew-default`,
     }
     // write conf.d/*.conf file
     if (!server) {
-      if (!fs.existsSync(serverPath) && serverPath === this.nginxConfigDPath) {
-        fs.writeFileSync(serverPath, '');
+      if (!this.fileExists(serverPath) && serverPath === this.nginxConfigDPath) {
+        this.writeFile(serverPath, '');
       }
       parser.writeConfigFile(
         this.prod || this.test
@@ -865,5 +876,42 @@ to change run with the option:${Reset}${Bright} --renew-default`,
     }
 
     return _server;
+  }
+
+  /**
+   * Simple read a file
+   * @param {string} filePath
+   * @returns
+   */
+  readFile(filePath) {
+    /**
+     * @type {ResultString}
+     */
+    let result = 1;
+    try {
+      result = fs.readFileSync(filePath).toString();
+    } catch (e) {
+      console.error(this.error, Red, 'Error read file', Reset, e);
+    }
+    return result;
+  }
+
+  /**
+   * Simple write a file
+   * @param {string} filePath
+   * @param {string} data
+   * @returns {ResultVoid}
+   */
+  writeFile(filePath, data) {
+    /**
+     * @type {ResultVoid}
+     */
+    let result = 1;
+    try {
+      result = fs.writeFileSync(filePath, data);
+    } catch (e) {
+      console.error(this.error, Red, 'Error write file', Reset, e);
+    }
+    return result;
   }
 };

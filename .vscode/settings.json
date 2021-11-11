@@ -6,8 +6,5 @@
   "[json]": {
     "editor.formatOnSave": false
   },
-  "files.associations": {
-    ".env.development": "ini",
-    ".env.production": "ini"
-  }
+  "javascript.suggestionActions.enabled": false
 }

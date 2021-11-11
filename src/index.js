@@ -9,8 +9,13 @@
  ******************************************************************************************/
 // @ts-check
 
-const { fstat } = require('fs');
 const Worker = require('./lib');
+const Employer = require('./git');
+
+const git = new Employer();
+
+const MAXIMUM_WAIT_ABORT = 2000;
+const MINIMUM_WAIT_ABORT = 1000;
 
 const Red = '\x1b[31m';
 const Reset = '\x1b[0m';
@@ -32,6 +37,11 @@ class Factory extends Worker {
    * @type {boolean}
    */
   ssl;
+
+  /**
+   * @type {boolean}
+   */
+  git;
 
   /**
    * @type {string} - name of package
@@ -92,6 +102,7 @@ class Factory extends Worker {
    *  nodeEnv: '--node-env';
    *  certbotPath: '--certbot-path';
    *  ssl: '--ssl';
+   *  git: '--git';
    * }}
    */
   params = {
@@ -104,12 +115,14 @@ class Factory extends Worker {
     nodeEnv: '--node-env',
     certbotPath: '--certbot-path',
     ssl: '--ssl',
+    git: '--git',
   };
 
   constructor() {
     super();
     this.arg = process.argv[2];
     this.ssl = false;
+    this.git = false;
     const argv = process.argv;
     this.certbotExe = '/snap/bin/certbot';
     this.setPackageJsonSelf();
@@ -134,6 +147,7 @@ OPTIONS:
   --node-env: application NODE_ENV
   --nginx-path: nginx path  
   --ssl: create certificate with certbot
+  --git: connect git server to automatic CI
   `;
     const { showDefault, run } = this.props;
 
@@ -164,12 +178,16 @@ OPTIONS:
       nodeEnv,
       certbotPath,
       ssl,
+      git,
     } = this.params;
     if (argv.indexOf(traceWarnings) !== -1) {
       this.traceWarnings = true;
     }
     if (argv.indexOf(ssl) !== -1) {
       this.ssl = true;
+    }
+    if (argv.indexOf(git) !== -1) {
+      this.git = true;
     }
     if (argv.indexOf(renewDefault) !== -1) {
       this.renewDefault = true;
@@ -313,6 +331,7 @@ OPTIONS:
       return 1;
     }
 
+    //// try run application before service restart
     const startTime = new Date().getTime();
     const controller = new AbortController();
     const { signal } = controller;
@@ -348,7 +367,7 @@ OPTIONS:
       onData: () => {
         setTimeout(() => {
           controller.abort();
-        }, 3000);
+        }, MAXIMUM_WAIT_ABORT);
       },
     });
     if (preStartPackage === 1) {
@@ -361,11 +380,11 @@ OPTIONS:
       console.info(this.info, Blue, preStartPackage, Reset);
     }
 
-    if (new Date().getTime() - startTime < 2000) {
+    if (new Date().getTime() - startTime < MINIMUM_WAIT_ABORT) {
       console.error(
         this.error,
         Red,
-        'Application down after running time less than 2 seconds',
+        `Application down after running time less than ${MINIMUM_WAIT_ABORT / 1000} second(s)`,
         Reset
       );
       return 1;
@@ -405,9 +424,26 @@ OPTIONS:
       command: 'systemctl',
       args: ['status', this.packageName],
     });
+    if (statusPackage === 1) {
+      return 1;
+    }
     if (statusPackage !== undefined) {
       console.info(this.info, Cyan, statusPackage, Reset);
     }
+
+    //// git server connection
+    const sshConfig = await git.setSshHost();
+    if (sshConfig === 1) {
+      return 1;
+    }
+
+    const secretKeyPath = await git.setSecretKeyPath();
+    if (secretKeyPath === 1) {
+      return 1;
+    }
+
+    const install = await git.create();
+    console.log('install', install);
 
     console.info(this.info, 'Package name:', Blue, this.packageName, Reset);
     console.info(this.info, 'Domain name:', Blue, this.domain, Reset);

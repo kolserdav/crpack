@@ -25,6 +25,7 @@ const Red = '\x1b[31m';
 const Reset = '\x1b[0m';
 const Bright = '\x1b[1m';
 const Yellow = '\x1b[33m';
+const Cyan = '\x1b[36m';
 const Green = '\x1b[32m';
 const Dim = '\x1b[2m';
 const Blue = '\x1b[34m';
@@ -221,9 +222,9 @@ module.exports = class Worker {
     const { command, args, options, onData } = props;
     console.info(Dim, `${command} ${args.join(' ')}`, Reset);
     const sh = spawn.call('sh', command, args, options || {});
+    let errorData = '';
+    let _data = '';
     return await new Promise((resolve, reject) => {
-      let errorData = '';
-      let _data = '';
       let subs = false;
       sh.stdout?.on('data', (data) => {
         _data += data.toString();
@@ -246,7 +247,6 @@ module.exports = class Worker {
         if (/AbortError/.test(err)) {
           resolve(0);
         } else {
-          console.warn(this.warning, Yellow, _data, Reset);
           reject(err);
         }
       });
@@ -258,6 +258,8 @@ module.exports = class Worker {
       });
     }).catch((e) => {
       if (!/AbortError/.test(e)) {
+        console.warn(this.warning, Yellow, errorData, Reset);
+        console.info(this.info, Cyan, _data, Reset);
         console.error(this.error, `Run command ${command} end with error`, Red, e, Reset);
       }
     });

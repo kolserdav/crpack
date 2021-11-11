@@ -17,6 +17,7 @@ const Bright = '\x1b[1m';
 const Yellow = '\x1b[33m';
 const Green = '\x1b[32m';
 const Dim = '\x1b[2m';
+const Blue = '\x1b[34m';
 const Blink = '\x1b[5m';
 
 class Factory extends Worker {
@@ -75,6 +76,8 @@ class Factory extends Worker {
    *  test: '--test';
    *  port: '--port';
    *  disabled: '--disabled';
+   *  nginxPath: '--nginx-path';
+   *   nodeEnv: '--node-env';
    * }}
    */
   params = {
@@ -83,12 +86,12 @@ class Factory extends Worker {
     test: '--test',
     port: '--port',
     disabled: '--disabled',
+    nginxPath: '--nginx-path',
+    nodeEnv: '--node-env',
   };
 
   constructor() {
     super();
-    const controller = new AbortController();
-    const { signal } = controller;
     this.arg = process.argv[2];
     const argv = process.argv;
     this.setPackageJsonSelf();
@@ -109,11 +112,9 @@ OPTIONS:
   --renew-default: rewrite default cache nginx file
   --test: run in dev as prod
   --port: local application port
-  --disabled: don't add package to autorun 
-
-ENVIRONMENT:
-  NGINX_PATH: [/etc/nginx]
-  NODE_ENV: [production]
+  --disabled: don't add package to autorun
+  --node-env: application NODE_ENV
+  --nginx-path: nginx path  
   `;
     const { showDefault, run } = this.props;
 
@@ -134,7 +135,7 @@ ENVIRONMENT:
    */
   setAdditional() {
     const argv = process.argv;
-    const { traceWarnings, renewDefault, test, port, disabled } = this.params;
+    const { traceWarnings, renewDefault, test, port, disabled, nginxPath, nodeEnv } = this.params;
     if (argv.indexOf(traceWarnings) !== -1) {
       this.traceWarnings = true;
     }
@@ -164,6 +165,33 @@ ENVIRONMENT:
         );
       }
       this.port = _isNan ? this.port : nextArgNum;
+    }
+    const nodeEnvArg = argv.indexOf(nodeEnv);
+    if (nodeEnvArg !== -1) {
+      const nextArg = process.argv[nodeEnvArg + 1];
+      if (!nextArg) {
+        console.warn(
+          this.warning,
+          Yellow,
+          'Node env value is missing while use --node-env option',
+          Reset
+        );
+      }
+      this.nodeEnv = nextArg ? nextArg : this.nodeEnv;
+    }
+
+    const nginxPathArg = argv.indexOf(nginxPath);
+    if (nginxPathArg !== -1) {
+      const nextArg = process.argv[nginxPathArg + 1];
+      if (!nextArg) {
+        console.warn(
+          this.warning,
+          Yellow,
+          'Nginx path value is missing while use --nginx-path option',
+          Reset
+        );
+      }
+      this.nginxPath = nextArg ? nextArg : this.nginxPath;
     }
   }
 
@@ -210,9 +238,68 @@ ENVIRONMENT:
       return 1;
     }
 
+    const startTime = new Date().getTime();
+    const controller = new AbortController();
+    const { signal } = controller;
+    const nodeExe = `${this.npmPath}/node`;
+    if (!this.packageJsonConfig.scripts) {
+      console.error(this.error, Red, 'Property "scripts" is missing on package.json');
+      return 1;
+    }
+    if (!this.packageJsonConfig.scripts.start) {
+      console.error(this.error, Red, 'Property "scripts.start" is missing on package.json');
+      return 1;
+    }
+
+    const stopPackage = await this.getSpawn({
+      command: 'systemctl',
+      args: ['stop', this.packageName],
+    });
+    if (stopPackage !== 0) {
+      return 1;
+    }
+
+    const preStartPackage = await this.getSpawn({
+      command: `${this.npmPath}/npm`,
+      args: ['run', 'start'],
+      options: {
+        cwd: this.pwd,
+        signal,
+        env: {
+          PORT: this.port,
+          NODE_ENV: process.env.NODE_ENV,
+          PATH: process.env.PATH,
+        },
+      },
+      onData: () => {
+        setTimeout(() => {
+          controller.abort();
+        }, 3000);
+      },
+    });
+    if (preStartPackage === 1) {
+      return 1;
+    }
+    if (preStartPackage === undefined) {
+      return 1;
+    }
+    if (typeof preStartPackage === 'string') {
+      console.info(this.info, Blue, preStartPackage, Reset);
+    }
+
+    if (new Date().getTime() - startTime < 2000) {
+      console.error(
+        this.error,
+        Red,
+        'Application down after running time less than 2 seconds',
+        Reset
+      );
+      return 1;
+    }
+
     const startPackage = await this.getSpawn({
       command: 'systemctl',
-      args: ['restart', this.packageName],
+      args: ['start', this.packageName],
     });
     if (startPackage !== 0) {
       return 1;

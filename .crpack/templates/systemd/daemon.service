@@ -11,6 +11,7 @@ User=root
 Group=root
 Environment=PATH=/usr/bin:/usr/local/bin
 Environment=NODE_ENV=production
+Environment=PORT=3000
 WorkingDirectory=/usr/local/share/applications/crpack
 ExecStart=/home/root/.nvm/versions/node/v16.10.0/bin/npm run test
 SyslogIdentifier=crpack

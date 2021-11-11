@@ -27,6 +27,7 @@ const Bright = '\x1b[1m';
 const Yellow = '\x1b[33m';
 const Green = '\x1b[32m';
 const Dim = '\x1b[2m';
+const Blue = '\x1b[34m';
 const Blink = '\x1b[5m';
 
 module.exports = class Worker {
@@ -167,10 +168,16 @@ module.exports = class Worker {
    */
   packageJsonSelf;
 
+  /**
+   * @type {string}
+   */
+  nodeEnv;
+
   constructor() {
     this.pwd = process.cwd();
     this.npmPackageVersion;
-    this.nginxPath = process.env.NGINX_PATH || '/etc/nginx';
+    this.nodeEnv = 'production';
+    this.nginxPath = '/etc/nginx';
     this.nginxConfigPath = `${this.nginxPath}/nginx.conf`;
     this.nginxConfigDPath = '';
     this.systemdConfigDir = '/etc/systemd/system/';
@@ -201,38 +208,52 @@ module.exports = class Worker {
 
   /**
    * Run spawn command
-   * @param {{ command: string, args: string[], options?: any }} props
+   * @param {{ command: string, args: string[], options?: any, onData?: () => void }} props
    * @returns {Promise<any>}
    */
   async getSpawn(props) {
-    const { command, args, options } = props;
+    const { command, args, options, onData } = props;
     console.info(Dim, `${command} ${args.join(' ')}`, Reset);
     const sh = spawn.call('sh', command, args, options || {});
     return await new Promise((resolve, reject) => {
+      let errorData = '';
+      let _data = '';
+      let subs = false;
       sh.stdout?.on('data', (data) => {
-        const str = data.toString();
-        resolve(str);
+        _data += data.toString();
+        if (!subs && onData) {
+          subs = true;
+          onData();
+        }
       });
       sh.stderr?.on('data', (err) => {
         const str = err.toString();
         if (command === 'nginx' && this.nginxRegex.test(str)) {
-          resolve(str);
+          _data = str;
         } else if (command === 'systemctl' && (args[0] === 'enable' || args[0] === 'disable')) {
-          resolve(str);
+          _data = str;
         } else {
-          console.error(this.error, `Run command return with error ${command}`, Red, str, Reset);
-          reject(str);
+          errorData += str;
         }
       });
       sh.on('error', (err) => {
-        console.error(this.error, `Run command error ${command}`, err);
-        reject(err);
+        if (/AbortError/.test(err)) {
+          resolve(0);
+        } else {
+          console.error(this.error, `Run command error ${command}`, err);
+          reject(err);
+        }
       });
       sh.on('close', (code) => {
-        resolve(code);
+        if (errorData) {
+          reject(errorData);
+        }
+        resolve(_data || code);
       });
     }).catch((e) => {
-      console.error(this.error, e);
+      if (!/AbortError/.test(e)) {
+        console.error(this.error, `Run command ${command} end with error`, Red, e, Reset);
+      }
     });
   }
 
@@ -339,13 +360,7 @@ module.exports = class Worker {
     });
     this.npmPath = path.normalize(npmPath.replace(/\/npm/, '')).replace(/\n/, '');
 
-    const fileName = `${this.systemdConfigDir}${this.packageName}.service`;
-    let iniContent;
-    if (fs.existsSync(fileName)) {
-      iniContent = fs.readFileSync(fileName).toString();
-    } else {
-      iniContent = fs.readFileSync(this.templateSystemdConfig).toString();
-    }
+    const iniContent = fs.readFileSync(this.templateSystemdConfig).toString();
     /**
      * @type {any}
      */
@@ -402,7 +417,9 @@ module.exports = class Worker {
           const clearItem = _item.value.replace(`:${this.npmPath}`, '');
           _item.value = `${clearItem}:${this.npmPath}`;
         } else if (/^NODE_ENV/.test(value)) {
-          _item.value = `NODE_ENV=${process.env.NODE_ENV || 'production'}`;
+          _item.value = `NODE_ENV=${this.nodeEnv}`;
+        } else if (/^PORT/.test(value)) {
+          _item.value = `PORT=${this.port}`;
         }
         break;
       case 'WorkingDirectory':

@@ -463,10 +463,13 @@ module.exports = class Worker {
 
   /**
    * Set global package name
-   * @returns {Promise<string>}
+   * @returns {Promise<string | 1>}
    */
   async setPackage() {
-    this.setPackageJson();
+    const setRes = this.setPackageJson();
+    if (setRes === 1) {
+      return 1;
+    }
     const rl = readline.createInterface({
       input: stdin,
       output: stdout,

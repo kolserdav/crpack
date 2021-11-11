@@ -93,7 +93,7 @@ class Factory extends Worker {
     const argv = process.argv;
     this.setPackageJsonSelf();
     this.disabled = false;
-    this.version = `CrPack version ${this.packageJsonSelf.version}`;
+    this.version = `CrPack version: ${this.packageJsonSelf.version}`;
     this.help = `
     ${this.version}
 > crpack [options] <command>   
@@ -172,7 +172,11 @@ ENVIRONMENT:
    * @returns {Promise<number>}
    */
   async createPackage() {
-    this.packageName = await this.setPackage();
+    const packageName = await this.setPackage();
+    if (packageName === 1) {
+      return 1;
+    }
+    this.packageName = packageName;
     console.info(this.info, 'Package name:', this.packageName);
     this.nginxConfigPath = await this.setUserNginxPath();
     console.info(this.info, 'Target nginx config path:', this.nginxConfigPath);

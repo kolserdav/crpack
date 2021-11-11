@@ -55,4 +55,6 @@ sudo crpack run --port 3001
 crpack -h
 ```
 
-If you encounter problems please post a issue describing the problem.
+# Other
+
+_If you encounter problems please post a issue describing the problem._

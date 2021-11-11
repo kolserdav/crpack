@@ -709,7 +709,6 @@ to change run with the option:${Reset}${Bright} --renew-default`,
         let exsists = false;
         const sProm = serverPaths.map((item) => {
           const confPath = path.resolve(confDPath, item);
-          console.log(confPath);
           return this.getNginxConfig(confPath);
         });
         const s = await Promise.all(sProm);
@@ -729,7 +728,7 @@ to change run with the option:${Reset}${Bright} --renew-default`,
         _serverPath = serverPath;
       }
     }
-
+    console.log(_serverPath);
     this.nginxConfigDPath =
       _serverPath && this.nginxConfigDPath
         ? this.nginxConfigDPath

@@ -251,7 +251,11 @@ module.exports = class Worker {
         }
       });
       sh.on('close', (code) => {
-        if (/Saving debug log/.test(errorData) && !/An unexpected error occurred/.test(errorData)) {
+        if (
+          /Saving debug log/.test(errorData) &&
+          !/error/.test(errorData) &&
+          !/failed/.test(errorData)
+        ) {
           console.info(this.info, Cyan, Dim, errorData, Reset);
           resolve(0);
         }

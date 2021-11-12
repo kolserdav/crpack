@@ -1,5 +1,6 @@
 .crpack/nginx.conf
 .crpack/.nginx.conf
+.crpack/package.json
 tmp
 .vscode
 .prettierc

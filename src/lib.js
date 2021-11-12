@@ -29,6 +29,7 @@ const Cyan = '\x1b[36m';
 const Dim = '\x1b[2m';
 
 /**
+ * @typedef {number | undefined} NumberUndefined
  * @typedef {1 | 0} Result
  * @typedef {1 | string} ResultString;
  * @typedef {1 | void} ResultVoid;
@@ -272,10 +273,20 @@ module.exports = class Worker {
       if (!/AbortError/.test(e)) {
         if (command !== 'nginx' && args[0] !== '-t' && /\.conf syntax is ok/.test(e)) {
           console.warn(this.warning, Yellow, errorData, Reset);
-        } else {
-          console.info(this.info, Cyan, errorData, Reset);
+        } else if (errorData) {
+          if (/fatal/.test(errorData)) {
+            console.error(this.error, Red, errorData, Reset);
+          } else {
+            console.info(this.info, Cyan, errorData, Reset);
+          }
         }
-        console.info(this.info, Cyan, _data, Reset);
+        if (_data) {
+          if (/fatal/.test(_data)) {
+            console.error(this.error, Red, _data, Reset);
+          } else {
+            console.info(this.info, Cyan, _data, Reset);
+          }
+        }
         if (command !== 'nginx' && args[0] !== '-t' && /\.conf syntax is ok/.test(e)) {
           console.error(this.error, `Run command ${command} end with error`, Red, e, Reset);
         }
@@ -328,12 +339,11 @@ module.exports = class Worker {
       command,
       args,
       options: { cwd: this.pwd },
-    }).catch((e) => {
-      console.error(this.error, `Error ${command} ${args.join(' ')}`);
     });
-    if (nginxRes === 1) {
+    if (nginxRes === 1 || nginxRes === undefined) {
       return 1;
-    }
+    } // noconsole
+
     if (typeof nginxRes === 'string') {
       const nginxV = nginxRes.match(this.nginxRegex);
       this.nginxVersion = nginxV ? nginxV[0] : null;
@@ -388,15 +398,9 @@ module.exports = class Worker {
    * @returns {Promise<IniErr>}
    */
   async getSystemConfig() {
-    const npmPath = await this.getSpawn({
-      command: 'which',
-      args: ['npm'],
-    });
+    const npmPath = await this.setNpmPath();
     if (npmPath === 1) {
       return 1;
-    }
-    if (typeof npmPath === 'string') {
-      this.npmPath = path.normalize(npmPath.replace(/\/npm/, '')).replace(/\n/, '');
     }
 
     const iniContent = fs.readFileSync(this.templateSystemdConfig).toString();
@@ -411,6 +415,25 @@ module.exports = class Worker {
 
     _data._ini.sections = data._ini.sections.map((item) => this.changeSystemdItem(item));
     return _data;
+  }
+
+  /**
+   *
+   * @returns {Promise<Result>}
+   */
+  async setNpmPath() {
+    const npmPath = await this.getSpawn({
+      command: 'which',
+      args: ['npm'],
+    });
+    if (npmPath === 1 || npmPath === undefined) {
+      return 1;
+    }
+    if (typeof npmPath === 'string') {
+      console.info(this.info, 'Npm path:', Cyan, npmPath, Reset);
+      this.npmPath = path.normalize(npmPath.replace(/\/npm/, '')).replace(/\n/, '');
+    }
+    return 0;
   }
 
   /**
@@ -484,7 +507,7 @@ module.exports = class Worker {
       if (options) {
         if (options.length !== 0) {
           this.ini += `[${name}]${delimiter}`;
-
+          // recursive
           return this.createIniFile(options);
         }
       }
@@ -497,13 +520,14 @@ module.exports = class Worker {
 
   /**
    * set package.json config
+   * @param {string} configPath
    */
-  setPackageJson() {
+  setPackageJson(configPath) {
     let result;
     try {
-      result = fs.readFileSync(this.configPath).toString();
+      result = fs.readFileSync(configPath).toString();
     } catch (err) {
-      console.error(this.error, Red, `${this.configPath} not found `, Reset);
+      console.error(this.error, Red, `${configPath} not found `, Reset);
       return 1;
     }
     this.packageJsonConfig = JSON.parse(result);
@@ -522,7 +546,7 @@ module.exports = class Worker {
    * @returns {Promise<string | 1>}
    */
   async setPackage() {
-    const setRes = this.setPackageJson();
+    const setRes = this.setPackageJson(this.configPath);
     if (setRes === 1) {
       return 1;
     }
@@ -958,5 +982,47 @@ to change run with the option:${Reset}${Bright} --renew-default`,
     if (resArr.length !== 0) {
       return 1;
     }
+  }
+
+  /**
+   *
+   * @param {string} filePath
+   * @returns {NumberUndefined}
+   */
+  getFileSize(filePath) {
+    if (!this.fileExists(filePath)) {
+      return undefined;
+    }
+    const stats = fs.statSync(filePath);
+    return stats.size;
+  }
+
+  /**
+   *
+   * @param {string} fileName
+   * @returns {fs.ReadStream}
+   */
+  getReadSteam(fileName) {
+    return fs.createReadStream(fileName);
+  }
+
+  /**
+   *
+   * @param {string} fileName
+   * @param {string} line
+   * @returns {Result}
+   */
+  appendLine(fileName, line) {
+    /**
+     * @type {Result}
+     */
+    let result = 0;
+    try {
+      fs.appendFileSync(fileName, `${line}\n`);
+    } catch (e) {
+      console.error(this.error, Red, 'Error append line to file', fileName);
+      result = 1;
+    }
+    return result;
   }
 };

@@ -19,7 +19,7 @@
   "engines": {
     "node": ">=15.0.0"
   },
-  "repository": "https://github.com/kolserdav/crpack.git",
+  "repository": "git@gitlab.com:kolserdav/crpack.git",
   "author": "kolserdav <serega12101983@gmail.com>",
   "license": "MIT",
   "bin": {

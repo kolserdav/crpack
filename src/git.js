@@ -20,6 +20,11 @@ const { stdin, stdout, env } = process;
 const { USER } = env;
 
 /**
+ *
+ * @typedef {1 | 0 | boolean} NumberBoolean
+ *
+ * @typedef {string | null} StringNull
+ *
  * @typedef {1 | 0} Result
  *
  * @typedef {1 | string} ResultString
@@ -70,11 +75,12 @@ module.exports = class Employer {
   configExists;
 
   constructor() {
-    this.sshConfig = `/home/${USER}/.ssh/config`;
+    const ssh = '/root/.ssh';
+    this.sshConfig = `${ssh}/config`;
     this.sshConfigDefault = path.resolve(__dirname, '../.crpack/templates/git/ssh/config');
     this.sshHost = 'gitlab.com';
     this.configExists = false;
-    this.secretKeyPath = `/home/${USER}/.ssh/gitlab`;
+    this.secretKeyPath = `${ssh}/gitlab`;
   }
 
   /**
@@ -145,6 +151,13 @@ module.exports = class Employer {
       input: stdin,
       output: stdout,
     });
+    console.warn(
+      worker.warning,
+      Yellow,
+      Dim,
+      "Don't forgot move secret key file to specified catalog with the same name",
+      Reset
+    );
     return new Promise((resolve) => {
       rl.question(`SSH secret key file path: ${Dim} ${this.secretKeyPath} ${Reset}> `, (value) => {
         this.secretKeyPath = value || this.secretKeyPath;
@@ -172,6 +185,7 @@ module.exports = class Employer {
    * @returns {Promise<Result>}
    */
   async create() {
+    worker.setPackageJson();
     const config = this.changeConfig();
     if (!this.configExists) {
       worker.createDir([
@@ -184,9 +198,67 @@ module.exports = class Employer {
       return 1;
     }
 
-    //
+    const { repository } = worker.packageJsonConfig;
+    if (!repository) {
+      console.error(worker.error, Red, 'Repository is not specified in package.json', Reset);
+      return 1;
+    }
+
+    const compareRes = await this.compareCommits(repository);
+    if (compareRes === 1) {
+      return 1;
+    }
+    let diff = false;
+    if (compareRes === false) {
+      diff = true;
+    }
+    console.info(worker.info, 'Local and remote last commits is different:', diff);
 
     return 0;
+  }
+
+  /**
+   * @param {string} repository
+   * @returns {Promise<NumberBoolean>}
+   */
+  async compareCommits(repository) {
+    const gitRes = await worker.getSpawn({
+      command: 'git',
+      args: ['ls-remote', repository],
+    });
+    if (gitRes === 1) {
+      return 1;
+    }
+    /**
+     * @type {StringNull}
+     */
+    let head = null;
+    if (gitRes) {
+      const headReg = gitRes.match(/^[a-zA-Z0-9]+/);
+      head = headReg[0] || null;
+    }
+    if (!head) {
+      console.warn(worker.warning, Yellow, 'Cant get head of last commit', Reset);
+      return 1;
+    }
+
+    const gitLocal = await worker.getSpawn({
+      command: 'git',
+      args: ['rev-parse', 'HEAD'],
+    });
+    if (gitLocal === 1) {
+      return 1;
+    }
+    let localHead = null;
+    if (gitLocal) {
+      const localHeadReg = gitLocal.match(/^[a-zA-Z0-9]+/);
+      localHead = localHeadReg[0] || null;
+    }
+    if (!localHead) {
+      console.warn(worker.warning, Yellow, 'Cant get head of last local commit', Reset);
+      return 1;
+    }
+    return localHead === head;
   }
 
   /**

@@ -354,15 +354,6 @@ module.exports = class Worker {
       }
       console.info(this.info, `Nginx version: ${this.nginxVersion}`);
     }
-    if (!this.nginxVersion) {
-      console.warn(
-        this.warning,
-        Yellow,
-        'Nginx is not installed, please install nginx and try again',
-        Reset
-      );
-      return 1;
-    }
     await this.cacheUserNginxConfig();
     return new Promise((resolve) => {
       parser.readConfigFile(

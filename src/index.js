@@ -366,6 +366,25 @@ OPTIONS:
    */
   async versionWarning() {
     const cachePackagePath = path.resolve(__dirname, '../.crpack/package.json');
+
+    const getRaw = await this.getSpawn({
+      command: 'curl',
+      args: [
+        '-o',
+        cachePackagePath,
+        'https://github.com/kolserdav/crpack/blob/master/package.json',
+      ],
+    });
+    if (getRaw === 1) {
+      return 1;
+    }
+
+    await new Promise((resolve) => {
+      setTimeout(() => {
+        resolve(0);
+      }, 1000);
+    });
+
     const getVer = await this.getSpawn({
       command: 'curl',
       args: [

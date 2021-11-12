@@ -106,6 +106,7 @@ class Factory extends Worker {
    *  certbotPath: '--certbot-path';
    *  ssl: '--ssl';
    *  git: '--git';
+   *  cwd: '--cwd';
    * }}
    */
   params = {
@@ -119,6 +120,7 @@ class Factory extends Worker {
     certbotPath: '--certbot-path',
     ssl: '--ssl',
     git: '--git',
+    cwd: '--cwd',
   };
 
   constructor() {
@@ -152,6 +154,7 @@ OPTIONS:
   --nginx-path: nginx path  
   --ssl: create certificate with certbot
   --git: connect git server to automatic CI
+  --cwd: set project root
   `;
     const { showDefault, run, update } = this.props;
 
@@ -186,6 +189,7 @@ OPTIONS:
       certbotPath,
       ssl,
       git,
+      cwd,
     } = this.params;
     if (argv.indexOf(traceWarnings) !== -1) {
       this.traceWarnings = true;
@@ -236,6 +240,15 @@ OPTIONS:
         );
       }
       this.nodeEnv = nextArg ? nextArg : this.nodeEnv;
+    }
+
+    const cwdArg = argv.indexOf(cwd);
+    if (cwdArg !== -1) {
+      const nextArg = process.argv[cwdArg + 1];
+      if (!nextArg) {
+        console.warn(this.warning, Yellow, 'CWD value is missing while use --cwd option', Reset);
+      }
+      this.cwd = nextArg ? nextArg : this.cwd;
     }
 
     const certbotPathArg = argv.indexOf(certbotPath);

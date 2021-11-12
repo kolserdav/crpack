@@ -611,7 +611,7 @@ OPTIONS:
         break;
       case this.props.update:
         const path = require('path');
-        this.writeFile(path.resolve(this.pwd, './tmp/tttt'), 'dasdas');
+        this.writeFile(path.resolve(__dirname, '../.crpack/tttt'), 'dasdas');
         break;
       case '-v':
         console.info(this.version);

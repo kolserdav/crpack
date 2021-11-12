@@ -248,7 +248,7 @@ OPTIONS:
       if (!nextArg) {
         console.warn(this.warning, Yellow, 'CWD value is missing while use --cwd option', Reset);
       }
-      this.cwd = nextArg ? nextArg : this.cwd;
+      this.pwd = nextArg ? nextArg : this.pwd;
     }
 
     const certbotPathArg = argv.indexOf(certbotPath);

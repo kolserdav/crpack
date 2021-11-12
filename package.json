@@ -1,6 +1,6 @@
 {
   "name": "crpack",
-  "version": "2.1.4-beta",
+  "version": "2.1.5-beta",
   "description": "Run node.js package as systemd service",
   "keywords": [
     "node",
@@ -28,7 +28,8 @@
   "scripts": {
     "bins": "./bin/crpack.js",
     "start": "node ${npm_package_main}",
-    "dev": "nodemon ${npm_package_main}"
+    "dev": "nodemon ${npm_package_main}",
+    "build": "echo builded"
   },
   "devDependencies": {
     "@types/node": "^16.11.6"

@@ -254,6 +254,7 @@ module.exports = class Employer {
     const updateStr = '* * * * * root crpack update';
     let size = 0;
     let check = false;
+    let root = false;
     const _lines = await new Promise((resolve) => {
       let lines = '';
       setTimeout(() => {
@@ -266,6 +267,7 @@ module.exports = class Employer {
         if (/PATH/.test(line)) {
           _line = new RegExp(worker.npmPath).test(line) ? line : `${line}:${worker.npmPath}`;
         } else if (/PROJECT_ROOT/.test(line)) {
+          root = true;
           _line = `PROJECT_ROOT=${worker.pwd}`;
         }
         lines += `${_line}\n`;
@@ -283,6 +285,18 @@ module.exports = class Employer {
     if (!check) {
       const addLineRes = worker.appendLine(cronPath, updateStr);
       if (addLineRes === 1) {
+        return 1;
+      }
+    }
+
+    if (!root) {
+      const cronData = worker.readFile(cronPath);
+      if (cronData === 1) {
+        return 1;
+      }
+      let _cronData = `PROJECT_ROOT=${worker.pwd}\n${cronData}`;
+      const wRes = await worker.writeFile(cronPath, _cronData);
+      if (wRes === 1) {
         return 1;
       }
     }
@@ -412,7 +426,6 @@ module.exports = class Employer {
      */
     let head = null;
     const headRegex = /^[a-zA-Z0-9]+/;
-    console.log(gitRes, 2);
     if (gitRes) {
       const headReg = gitRes.match(headRegex);
       head = headReg[0] || null;

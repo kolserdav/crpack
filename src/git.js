@@ -412,6 +412,7 @@ module.exports = class Employer {
      */
     let head = null;
     const headRegex = /^[a-zA-Z0-9]+/;
+    console.log(gitRes, 2);
     if (gitRes) {
       const headReg = gitRes.match(headRegex);
       head = headReg[0] || null;

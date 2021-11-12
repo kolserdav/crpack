@@ -15,3 +15,8 @@ class SSHConfig1 {
 module 'ssh-config' {
   export default SSHConfig1;
 }
+
+module 'linebyline' {
+  const rl: () => any;
+  export = rl.exports;
+}

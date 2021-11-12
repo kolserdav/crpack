@@ -13,9 +13,11 @@ linux + systemd
 Dependencies:
 
 ```d
-nginx          // latest
-certbot        // latest
 node           // >=15.0.0 (used AbortController)
+nginx          // latest (for set multi domains)
+certbot        // latest (for --ssl option)
+cron           // any (for --git option)
+curl           // any for --git option)
 ```
 
 Additionals:

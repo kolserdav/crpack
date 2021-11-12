@@ -1,10 +1,14 @@
 // @ts-check
+var os = require('os');
 const path = require('path');
 const SSHConfig = require('ssh-config');
 const Worker = require('./lib');
 const readline = require('readline');
+const linebyline = require('linebyline');
 
 const worker = new Worker();
+
+const { EOL } = os;
 
 const Red = '\x1b[31m';
 const Reset = '\x1b[0m';
@@ -20,6 +24,13 @@ const { stdin, stdout, env } = process;
 const { USER } = env;
 
 /**
+ *
+ * @typedef {1 | 0 | string | undefined} ResultUndefined;
+ *
+ * @typedef {1 | 0 | boolean} NumberBoolean
+ *
+ * @typedef {string | null} StringNull
+ *
  * @typedef {1 | 0} Result
  *
  * @typedef {1 | string} ResultString
@@ -70,11 +81,12 @@ module.exports = class Employer {
   configExists;
 
   constructor() {
-    this.sshConfig = `/home/${USER}/.ssh/config`;
+    const ssh = '/root/.ssh';
+    this.sshConfig = `${ssh}/config`;
     this.sshConfigDefault = path.resolve(__dirname, '../.crpack/templates/git/ssh/config');
     this.sshHost = 'gitlab.com';
     this.configExists = false;
-    this.secretKeyPath = `/home/${USER}/.ssh/gitlab`;
+    this.secretKeyPath = `${ssh}/gitlab`;
   }
 
   /**
@@ -145,6 +157,13 @@ module.exports = class Employer {
       input: stdin,
       output: stdout,
     });
+    console.warn(
+      worker.warning,
+      Yellow,
+      Dim,
+      "Don't forgot move secret key file to specified catalog with the same name",
+      Reset
+    );
     return new Promise((resolve) => {
       rl.question(`SSH secret key file path: ${Dim} ${this.secretKeyPath} ${Reset}> `, (value) => {
         this.secretKeyPath = value || this.secretKeyPath;
@@ -172,6 +191,8 @@ module.exports = class Employer {
    * @returns {Promise<Result>}
    */
   async create() {
+    // set config
+    worker.setPackageJson(worker.configPath);
     const config = this.changeConfig();
     if (!this.configExists) {
       worker.createDir([
@@ -184,9 +205,181 @@ module.exports = class Employer {
       return 1;
     }
 
-    //
+    // get repository
+    const { repository } = worker.packageJsonConfig;
+    if (!repository) {
+      console.error(worker.error, Red, 'Repository is not specified in package.json', Reset);
+      return 1;
+    }
+
+    // update
+    const updateRes = await this.update(repository);
+    if (updateRes === 1) {
+      return 1;
+    }
+
+    // cron
+    const cron = await this.createCron();
+    if (cron === 1) {
+      return 1;
+    }
+    return 0;
+  }
+
+  /**
+   * @returns {Promise<Result>}
+   */
+  async createCron() {
+    await worker.setNpmPath();
+    const cronPath = '/etc/cron.d/0hourly';
+
+    if (!worker.fileExists(cronPath)) {
+      console.error(
+        worker.error,
+        Red,
+        'Cron config file is not exists',
+        Reset,
+        Bright,
+        cronPath,
+        Reset
+      );
+      return 1;
+    }
+    const fileStream = worker.getReadSteam(cronPath);
+
+    const rl = readline.createInterface({
+      input: fileStream,
+      crlfDelay: Infinity,
+    });
+    const updateStr = '* * * * * root crpack update';
+    let size = 0;
+    let check = false;
+    const _lines = await new Promise((resolve) => {
+      let lines = '';
+      setTimeout(() => {
+        resolve(lines);
+      }, 1000);
+      rl.on('line', (data) => {
+        let line = data.toString();
+        size += line.length;
+        let _line = line;
+        if (/PATH/.test(line)) {
+          _line = new RegExp(worker.npmPath).test(line) ? line : `${line}:${worker.npmPath}`;
+        } else if (/PROJECT_ROOT/.test(line)) {
+          _line = `PROJECT_ROOT=${worker.pwd}`;
+        }
+        lines += `${_line}\n`;
+        if (line.match(/crpack update/)) {
+          check = true;
+        }
+      });
+    });
+
+    const writeRes = worker.writeFile(cronPath, _lines);
+    if (writeRes === 1) {
+      return 1;
+    }
+
+    if (!check) {
+      const addLineRes = worker.appendLine(cronPath, updateStr);
+      if (addLineRes === 1) {
+        return 1;
+      }
+    }
+
+    console.log(2);
 
     return 0;
+  }
+
+  /**
+   *
+   * @param {string} repository
+   * @returns {Promise<Result>}
+   */
+  async update(repository) {
+    const compareRes = await this.compareCommits(repository);
+    if (compareRes === 1) {
+      return 1;
+    }
+    let diff = false;
+    if (typeof compareRes === 'boolean') {
+      diff = !compareRes;
+    }
+    if (diff) {
+      const pullRes = await this.pull(repository, 'main');
+      if (pullRes === 1) {
+        return 1;
+      }
+    }
+    console.info(worker.info, 'Local and remote last commits is different:', diff);
+    return 0;
+  }
+
+  /**
+   * @param {string} repository
+   * @param {string} branch
+   * @returns {Promise<ResultUndefined>}
+   */
+  async pull(repository, branch = 'master') {
+    const res = await worker.getSpawn({
+      command: 'git',
+      args: ['pull', `${repository}`, branch],
+      options: {
+        cwd: worker.pwd,
+      },
+    });
+    if (res === 1 || res === undefined) {
+      return 1;
+    }
+  }
+
+  /**
+   * @param {string} repository
+   * @returns {Promise<NumberBoolean>}
+   */
+  async compareCommits(repository) {
+    const gitRes = await worker.getSpawn({
+      command: 'git',
+      args: ['ls-remote', repository],
+    });
+    if (gitRes === 1) {
+      return 1;
+    }
+    /**
+     * @type {StringNull}
+     */
+    let head = null;
+    const headRegex = /^[a-zA-Z0-9]+/;
+    if (gitRes) {
+      const headReg = gitRes.match(headRegex);
+      head = headReg[0] || null;
+    }
+    if (!head) {
+      console.warn(worker.warning, Yellow, 'Cant get head of last commit', Reset);
+      return 1;
+    }
+
+    const gitLocal = await worker.getSpawn({
+      command: 'git',
+      args: ['rev-parse', 'HEAD'],
+      options: {
+        cwd: worker.pwd,
+      },
+    });
+    if (gitLocal === 1) {
+      return 1;
+    }
+    let localHead = null;
+    if (gitLocal) {
+      const localHeadReg = gitLocal.match(headRegex);
+      localHead = localHeadReg[0] || null;
+    }
+    if (!localHead) {
+      console.warn(worker.warning, Yellow, 'Cant get head of last local commit', Reset);
+      return 1;
+    }
+    return localHead === head;
   }
 
   /**

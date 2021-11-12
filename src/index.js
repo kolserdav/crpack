@@ -9,6 +9,7 @@
  ******************************************************************************************/
 // @ts-check
 
+const path = require('path');
 const Worker = require('./lib');
 const Employer = require('./git');
 
@@ -82,11 +83,13 @@ class Factory extends Worker {
    * @type {{
    *  showDefault: 'show-default';
    *  run: 'run';
+   *  update: 'update';
    * }}
    */
   props = {
     showDefault: 'show-default',
     run: 'run',
+    update: 'update',
   };
 
   /**
@@ -139,6 +142,7 @@ class Factory extends Worker {
 COMMANDS:
   run: start create package script
   show-default: show default nginx config
+  update: update git local commit
 
 OPTIONS:
   -h | --help: show this man 
@@ -153,7 +157,7 @@ OPTIONS:
   --ssl: create certificate with certbot
   --git: connect git server to automatic CI
   `;
-    const { showDefault, run } = this.props;
+    const { showDefault, run, update } = this.props;
 
     /**
      * Commands
@@ -164,6 +168,9 @@ OPTIONS:
     }
     if (argv.indexOf(showDefault) !== -1) {
       this.arg = showDefault;
+    }
+    if (argv.indexOf(update) !== -1) {
+      this.arg = update;
     }
   }
 
@@ -269,14 +276,9 @@ OPTIONS:
    * @returns {Promise<Result>}
    */
   async createPackage() {
-    /**
-     * @type {Result}
-     */
-    let result = 0;
-
     const packageName = await this.setPackage();
     if (packageName === 1) {
-      result = 1;
+      return 1;
     } else {
       this.packageName = packageName;
     }
@@ -295,13 +297,13 @@ OPTIONS:
     this.nginxConfigPath = nginxExists ? this.nginxConfigPath : await this.setUserNginxPath();
 
     const setupNginx = await this.setupNginx();
-    if (setupNginx !== 0) {
-      result = 1;
+    if (setupNginx === 1) {
+      return 1;
     }
 
     const restartNginx = await this.restartNginx();
-    if (restartNginx !== 0) {
-      result = 1;
+    if (restartNginx === 1) {
+      return 1;
     }
 
     // Create ssl certificate
@@ -310,30 +312,30 @@ OPTIONS:
         command: this.certbotExe,
         args: ['-d', this.domain, '--nginx'],
       });
-      if (certbot === undefined) {
-        result = 1;
+      if (certbot === undefined || certbot === 1) {
+        return 1;
       }
     }
 
     const setUpPack = await this.setupPackage();
-    if (setUpPack !== 0) {
-      result = 1;
+    if (setUpPack === 1) {
+      return 1;
     }
 
     const restartRes = await this.restartService();
-    if (restartRes !== 0) {
-      result = 1;
+    if (restartRes === 1) {
+      return 1;
     }
 
     //// git server connection
     const sshConfig = await git.setSshHost();
     if (sshConfig === 1) {
-      result = 1;
+      return 1;
     }
 
     const secretKeyPath = await git.setSecretKeyPath();
     if (secretKeyPath === 1) {
-      result = 1;
+      return 1;
     }
 
     const install = await git.create();
@@ -351,7 +353,46 @@ OPTIONS:
       `${this.systemdConfigDir}${this.packageName}.service`,
       Reset
     );
-    return result;
+    await this.versionWarning();
+    return 0;
+  }
+
+  /**
+   *
+   * @returns {Promise<Result>}
+   */
+  async versionWarning() {
+    const cachePackagePath = path.resolve(__dirname, '../.crpack/package.json');
+    const getVer = await this.getSpawn({
+      command: 'curl',
+      args: [
+        '-o',
+        cachePackagePath,
+        'https://raw.githubusercontent.com/kolserdav/crpack/main/package.json',
+      ],
+    });
+    if (getVer === 1) {
+      return 1;
+    }
+    const { version: currentVer } = this.packageJsonConfig;
+    this.setPackageJson(cachePackagePath);
+    const { version } = this.packageJsonConfig;
+    if (version !== currentVer) {
+      console.warn(
+        Yellow,
+        this.warning,
+        Cyan,
+        Blink,
+        'New version of CrPack is now available\n',
+        'Current version:',
+        currentVer,
+        '\n',
+        'New version:',
+        version,
+        Reset
+      );
+    }
+    return 0;
   }
 
   /**
@@ -390,7 +431,7 @@ OPTIONS:
    */
   async setupPackage() {
     const systemdConfig = await this.getSystemConfig();
-    if (systemdConfig === 1) {
+    if (systemdConfig === 1 || systemdConfig === undefined) {
       return 1;
     }
     const systemData = this.createIniFile(systemdConfig._ini.sections);
@@ -430,34 +471,30 @@ OPTIONS:
    * @returns {Promise<Result>}
    */
   async restartService() {
-    /**
-     * @type {Result}
-     */
-    let result = 0;
     const daemonReload = await this.getSpawn({
       command: 'systemctl',
       args: ['daemon-reload'],
     });
-    if (daemonReload !== 0) {
-      result = 1;
+    if (daemonReload === 1 || daemonReload === undefined) {
+      return 1;
     }
     const startTime = new Date().getTime();
     const controller = new AbortController();
     const { signal } = controller;
     if (!this.packageJsonConfig.scripts) {
       console.error(this.error, Red, 'Property "scripts" is missing on package.json');
-      result = 1;
+      return 1;
     }
     if (!this.packageJsonConfig.scripts.start) {
       console.error(this.error, Red, 'Property "scripts.start" is missing on package.json');
-      result = 1;
+      return 1;
     }
     const stopPackage = await this.getSpawn({
       command: 'systemctl',
       args: ['stop', this.packageName],
     });
-    if (stopPackage !== 0) {
-      result = 1;
+    if (stopPackage === 1 || stopPackage === undefined) {
+      return 1;
     }
 
     const preStartPackage = await this.getSpawn({
@@ -478,11 +515,8 @@ OPTIONS:
         }, MAXIMUM_WAIT_ABORT);
       },
     });
-    if (preStartPackage === 1) {
-      result = 1;
-    }
-    if (preStartPackage === undefined) {
-      result = 1;
+    if (preStartPackage === 1 || preStartPackage === undefined) {
+      return 1;
     }
     if (typeof preStartPackage === 'string') {
       console.info(this.info, Blue, preStartPackage, Reset);
@@ -495,29 +529,27 @@ OPTIONS:
         `Application down after running time less than ${MINIMUM_WAIT_ABORT / 1000} second(s)`,
         Reset
       );
-      result = 1;
+      return 1;
     }
 
     const startPackage = await this.getSpawn({
       command: 'systemctl',
       args: ['start', this.packageName],
     });
-    if (startPackage !== 0) {
-      result = 1;
+    if (startPackage === 1 || startPackage === undefined) {
+      return 1;
     }
 
     const statusPackage = await this.getSpawn({
       command: 'systemctl',
       args: ['status', this.packageName],
     });
-    if (statusPackage === 1) {
-      result = 1;
+    if (statusPackage === 1 || statusPackage === undefined) {
+      return 1;
     }
-    if (statusPackage !== undefined) {
-      console.info(this.info, Cyan, statusPackage, Reset);
-    }
+    console.info(this.info, Cyan, statusPackage, Reset);
 
-    return result;
+    return 0;
   }
 
   /**
@@ -576,6 +608,10 @@ OPTIONS:
         } else {
           console.warn(this.warning, Yellow, 'Create package return error');
         }
+        break;
+      case this.props.update:
+        const path = require('path');
+        this.writeFile(path.resolve(__dirname, '../tmp/tttt'), 'dasdas');
         break;
       case '-v':
         console.info(this.version);

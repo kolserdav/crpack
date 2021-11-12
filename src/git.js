@@ -369,6 +369,7 @@ module.exports = class Employer {
           CWD: worker.pwd,
           PWD: worker.pwd,
           NODE_ENV: process.env.NODE_ENV || 'production',
+          PATH: worker.npmPath,
         },
       },
     });

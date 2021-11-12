@@ -1,6 +1,6 @@
 {
   "name": "crpack",
-  "version": "2.2.3-pre-release",
+  "version": "2.2.4-pre-release",
   "description": "Run node.js package as systemd service",
   "keywords": [
     "node",

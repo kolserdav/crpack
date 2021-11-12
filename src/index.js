@@ -368,7 +368,7 @@ OPTIONS:
       args: [
         '-o',
         cachePackagePath,
-        'https://raw.githubusercontent.com/kolserdav/crpack/main/package.json',
+        'https://raw.githubusercontent.com/kolserdav/crpack/master/package.json',
       ],
     });
     if (getVer === 1) {
@@ -611,7 +611,7 @@ OPTIONS:
         break;
       case this.props.update:
         const path = require('path');
-        this.writeFile(path.resolve(__dirname, '../tmp/tttt'), 'dasdas');
+        this.writeFile(path.resolve(this.pwd, './tmp/tttt'), 'dasdas');
         break;
       case '-v':
         console.info(this.version);

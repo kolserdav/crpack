@@ -287,8 +287,6 @@ module.exports = class Employer {
       }
     }
 
-    console.log(2);
-
     return 0;
   }
 
@@ -298,10 +296,16 @@ module.exports = class Employer {
    * @returns {Promise<Result>}
    */
   async update(repository) {
+    const npmPath = await worker.setNpmPath();
+    if (npmPath === 1) {
+      return 1;
+    }
+
     const compareRes = await this.compareCommits(repository);
     if (compareRes === 1) {
       return 1;
     }
+
     let diff = false;
     if (typeof compareRes === 'boolean') {
       diff = !compareRes;
@@ -311,8 +315,65 @@ module.exports = class Employer {
       if (pullRes === 1) {
         return 1;
       }
+
+      const installRes = await this.installDependencies();
+      if (installRes === 1) {
+        return 1;
+      }
+
+      const buildPackage = await this.buildPackage();
+      if (buildPackage === 1) {
+        return;
+      }
+
+      const packageJsonConfig = worker.setPackageJson(path.resolve(worker.pwd, 'package.json'));
+      if (packageJsonConfig === 1) {
+        return 1;
+      }
+
+      const restartRes = await worker.restartService();
+      if (restartRes === 1) {
+        return 1;
+      }
     }
-    console.info(worker.info, 'Local and remote last commits is different:', diff);
+    return 0;
+  }
+
+  /**
+   *
+   * @returns {Promise<Result>}
+   */
+  async buildPackage() {
+    const buildRes = await worker.getSpawn({
+      command: `${worker.npmPath}/npm`,
+      args: ['run', 'build'],
+      options: {
+        cwd: worker.pwd,
+      },
+    });
+    if (buildRes === 1 || buildRes === undefined) {
+      return 1;
+    }
+    console.info(worker.info, Cyan, buildRes, Reset);
+    return 0;
+  }
+
+  /**
+   *
+   * @returns {Promise<Result>}
+   */
+  async installDependencies() {
+    const installRes = await worker.getSpawn({
+      command: `${worker.npmPath}/npm`,
+      args: ['install'],
+      options: {
+        cwd: worker.pwd,
+      },
+    });
+    if (installRes === 1 || installRes === undefined) {
+      return 1;
+    }
+    console.info(worker.info, Cyan, installRes, Reset);
     return 0;
   }
 
@@ -329,7 +390,7 @@ module.exports = class Employer {
         cwd: worker.pwd,
       },
     });
-    if (res === 1 || res === undefined) {
+    if (res === 1) {
       return 1;
     }
   }

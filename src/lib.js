@@ -16,6 +16,9 @@ const readline = require('readline');
 const ConfigParser = require('@webantic/nginx-config-parser');
 const { ConfigIniParser } = require('config-ini-parser');
 
+const MAXIMUM_WAIT_ABORT = 2000;
+const MINIMUM_WAIT_ABORT = 1000;
+
 const delimiter = '\n';
 const { stdin, stdout } = process;
 const parser = new ConfigParser();
@@ -27,6 +30,7 @@ const Bright = '\x1b[1m';
 const Yellow = '\x1b[33m';
 const Cyan = '\x1b[36m';
 const Dim = '\x1b[2m';
+const Blue = '\x1b[34m';
 
 /**
  * @typedef {number | undefined} NumberUndefined
@@ -271,6 +275,23 @@ module.exports = class Worker {
       });
     }).catch((e) => {
       if (!/AbortError/.test(e)) {
+        if (args[0] === 'run' && args[1] === 'start' && new RegExp('Permission denied').test(e)) {
+          console.warn(
+            this.warning,
+            Yellow,
+            'Try add npm path',
+            Reset,
+            Bright,
+            this.npmPath,
+            Reset,
+            Yellow,
+            'to visudo, command:',
+            Reset,
+            Bright,
+            'sudo visudo',
+            Reset
+          );
+        }
         if (command !== 'nginx' && args[0] !== '-t' && /\.conf syntax is ok/.test(e)) {
           console.warn(this.warning, Yellow, errorData, Reset);
         } else if (errorData) {
@@ -1024,5 +1045,92 @@ to change run with the option:${Reset}${Bright} --renew-default`,
       result = 1;
     }
     return result;
+  }
+
+  /**
+   * try run application before restart service
+   * @returns {Promise<Result>}
+   */
+  async restartService() {
+    const daemonReload = await this.getSpawn({
+      command: 'systemctl',
+      args: ['daemon-reload'],
+    });
+    if (daemonReload === 1 || daemonReload === undefined) {
+      return 1;
+    }
+    const startTime = new Date().getTime();
+    const controller = new AbortController();
+    const { signal } = controller;
+    if (!this.packageJsonConfig.scripts) {
+      console.error(this.error, Red, 'Property "scripts" is missing on package.json');
+      return 1;
+    }
+    if (!this.packageJsonConfig.scripts.start) {
+      console.error(this.error, Red, 'Property "scripts.start" is missing on package.json');
+      return 1;
+    }
+    this.packageName = this.packageJsonConfig.name;
+    const stopPackage = await this.getSpawn({
+      command: 'systemctl',
+      args: ['stop', this.packageName],
+    });
+    if (stopPackage === 1 || stopPackage === undefined) {
+      return 1;
+    }
+
+    const preStartPackage = await this.getSpawn({
+      command: `${this.npmPath}/npm`,
+      args: ['run', 'start'],
+      options: {
+        cwd: this.pwd,
+        signal,
+        env: {
+          PORT: this.port,
+          NODE_ENV: process.env.NODE_ENV,
+          PATH: process.env.PATH,
+        },
+      },
+      onData: () => {
+        setTimeout(() => {
+          controller.abort();
+        }, MAXIMUM_WAIT_ABORT);
+      },
+    });
+    if (preStartPackage === 1) {
+      return 1;
+    }
+    if (typeof preStartPackage === 'string') {
+      console.info(this.info, Blue, preStartPackage, Reset);
+    }
+
+    if (new Date().getTime() - startTime < MINIMUM_WAIT_ABORT) {
+      console.error(
+        this.error,
+        Red,
+        `Application down after running time less than ${MINIMUM_WAIT_ABORT / 1000} second(s)`,
+        Reset
+      );
+      return 1;
+    }
+
+    const startPackage = await this.getSpawn({
+      command: 'systemctl',
+      args: ['start', this.packageName],
+    });
+    if (startPackage === 1 || startPackage === undefined) {
+      return 1;
+    }
+
+    const statusPackage = await this.getSpawn({
+      command: 'systemctl',
+      args: ['status', this.packageName],
+    });
+    if (statusPackage === 1 || statusPackage === undefined) {
+      return 1;
+    }
+    console.info(this.info, Cyan, statusPackage, Reset);
+
+    return 0;
   }
 };

@@ -369,7 +369,7 @@ module.exports = class Employer {
           CWD: worker.pwd,
           PWD: worker.pwd,
           NODE_ENV: process.env.NODE_ENV || 'production',
-          PATH: worker.npmPath.replace(/\/npm/, ''),
+          PATH: `/sbin:/bin:/usr/sbin:/usr/bin:${worker.npmPath.replace(/\/npm/, '')}`,
         },
       },
     });

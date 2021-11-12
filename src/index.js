@@ -15,10 +15,6 @@ const Employer = require('./git');
 
 const git = new Employer();
 
-const MAXIMUM_WAIT_ABORT = 2000;
-const MINIMUM_WAIT_ABORT = 1000;
-
-const Red = '\x1b[31m';
 const Reset = '\x1b[0m';
 const Bright = '\x1b[1m';
 const Yellow = '\x1b[33m';
@@ -490,92 +486,6 @@ OPTIONS:
   }
 
   /**
-   * try run application before restart service
-   * @returns {Promise<Result>}
-   */
-  async restartService() {
-    const daemonReload = await this.getSpawn({
-      command: 'systemctl',
-      args: ['daemon-reload'],
-    });
-    if (daemonReload === 1 || daemonReload === undefined) {
-      return 1;
-    }
-    const startTime = new Date().getTime();
-    const controller = new AbortController();
-    const { signal } = controller;
-    if (!this.packageJsonConfig.scripts) {
-      console.error(this.error, Red, 'Property "scripts" is missing on package.json');
-      return 1;
-    }
-    if (!this.packageJsonConfig.scripts.start) {
-      console.error(this.error, Red, 'Property "scripts.start" is missing on package.json');
-      return 1;
-    }
-    const stopPackage = await this.getSpawn({
-      command: 'systemctl',
-      args: ['stop', this.packageName],
-    });
-    if (stopPackage === 1 || stopPackage === undefined) {
-      return 1;
-    }
-
-    const preStartPackage = await this.getSpawn({
-      command: `${this.npmPath}/npm`,
-      args: ['run', 'start'],
-      options: {
-        cwd: this.pwd,
-        signal,
-        env: {
-          PORT: this.port,
-          NODE_ENV: process.env.NODE_ENV,
-          PATH: process.env.PATH,
-        },
-      },
-      onData: () => {
-        setTimeout(() => {
-          controller.abort();
-        }, MAXIMUM_WAIT_ABORT);
-      },
-    });
-    if (preStartPackage === 1 || preStartPackage === undefined) {
-      return 1;
-    }
-    if (typeof preStartPackage === 'string') {
-      console.info(this.info, Blue, preStartPackage, Reset);
-    }
-
-    if (new Date().getTime() - startTime < MINIMUM_WAIT_ABORT) {
-      console.error(
-        this.error,
-        Red,
-        `Application down after running time less than ${MINIMUM_WAIT_ABORT / 1000} second(s)`,
-        Reset
-      );
-      return 1;
-    }
-
-    const startPackage = await this.getSpawn({
-      command: 'systemctl',
-      args: ['start', this.packageName],
-    });
-    if (startPackage === 1 || startPackage === undefined) {
-      return 1;
-    }
-
-    const statusPackage = await this.getSpawn({
-      command: 'systemctl',
-      args: ['status', this.packageName],
-    });
-    if (statusPackage === 1 || statusPackage === undefined) {
-      return 1;
-    }
-    console.info(this.info, Cyan, statusPackage, Reset);
-
-    return 0;
-  }
-
-  /**
    *
    * @returns {Promise<Result>}
    */
@@ -634,7 +544,13 @@ OPTIONS:
         break;
       case this.props.update:
         const path = require('path');
-        this.writeFile(path.resolve(__dirname, '../.crpack/tttt'), 'dasdas');
+        this.setPackageJson(path.resolve(this.pwd, 'package.json'));
+        const updateRes = await git.update(this.packageJsonConfig.repository);
+        if (updateRes === 1) {
+          console.warn(this.warning, Yellow, 'Update script is not success', Reset);
+        } else {
+          console.info(this.info, Green, 'Success update repository', Reset);
+        }
         break;
       case '-v':
         console.info(this.version);

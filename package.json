@@ -28,7 +28,8 @@
   "scripts": {
     "bins": "./bin/crpack.js",
     "start": "node ${npm_package_main}",
-    "dev": "nodemon ${npm_package_main}"
+    "dev": "nodemon ${npm_package_main}",
+    "build": "echo builded"
   },
   "devDependencies": {
     "@types/node": "^16.11.6"

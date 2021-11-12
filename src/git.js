@@ -335,6 +335,8 @@ module.exports = class Employer {
         return 1;
       }
 
+      await worker.wait(2000);
+
       const buildPackage = await this.buildPackage();
       if (buildPackage === 1) {
         return;

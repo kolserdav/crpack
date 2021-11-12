@@ -189,7 +189,7 @@ module.exports = class Worker {
   nodeEnv;
 
   constructor() {
-    this.pwd = process.cwd();
+    this.pwd = process.env.PROJECT_ROOT || process.cwd();
     this.npmPackageVersion;
     this.nodeEnv = 'production';
     this.nginxPath = '/etc/nginx';

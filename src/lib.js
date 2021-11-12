@@ -1071,13 +1071,6 @@ to change run with the option:${Reset}${Bright} --renew-default`,
       return 1;
     }
     this.packageName = this.packageJsonConfig.name;
-    const stopPackage = await this.getSpawn({
-      command: 'systemctl',
-      args: ['stop', this.packageName],
-    });
-    if (stopPackage === 1 || stopPackage === undefined) {
-      return 1;
-    }
 
     const preStartPackage = await this.getSpawn({
       command: `${this.npmPath}/npm`,
@@ -1086,7 +1079,7 @@ to change run with the option:${Reset}${Bright} --renew-default`,
         cwd: this.pwd,
         signal,
         env: {
-          PORT: this.port,
+          PORT: 5151,
           NODE_ENV: process.env.NODE_ENV,
           PATH: process.env.PATH,
         },
@@ -1116,7 +1109,7 @@ to change run with the option:${Reset}${Bright} --renew-default`,
 
     const startPackage = await this.getSpawn({
       command: 'systemctl',
-      args: ['start', this.packageName],
+      args: ['restart', this.packageName],
     });
     if (startPackage === 1 || startPackage === undefined) {
       return 1;

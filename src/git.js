@@ -364,10 +364,10 @@ module.exports = class Employer {
   async buildPackage() {
     const buildRes = await worker.getSpawn({
       command: `${worker.npmPath}/npm`,
-      args: ['run', 'build'],
+      args: ['run', 'build', '--openssl-legacy-provider'],
       options: {
         cwd: worker.pwd,
-        env: this.getEnv(),
+        env: this.getEnv('production'),
       },
     });
     if (buildRes === 1 || buildRes === undefined) {
@@ -377,11 +377,16 @@ module.exports = class Employer {
     return 0;
   }
 
-  getEnv() {
+  /**
+   *
+   * @param {string} _path
+   * @returns
+   */
+  getEnv(_path) {
     return {
       CWD: worker.pwd,
       PWD: worker.pwd,
-      NODE_ENV: process.env.NODE_ENV || 'production',
+      NODE_ENV: process.env.NODE_ENV || _path,
       PATH: `/sbin:/bin:/usr/sbin:/usr/bin:${worker.npmPath.replace(/\/npm/, '')}`,
     };
   }
@@ -396,7 +401,7 @@ module.exports = class Employer {
       args: ['install'],
       options: {
         cwd: worker.pwd,
-        env: this.getEnv(),
+        env: this.getEnv('development'),
       },
     });
     if (installRes === 1 || installRes === undefined) {

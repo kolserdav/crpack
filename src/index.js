@@ -375,11 +375,7 @@ OPTIONS:
       return 1;
     }
 
-    await new Promise((resolve) => {
-      setTimeout(() => {
-        resolve(0);
-      }, 1000);
-    });
+    await this.wait(1000);
 
     const getVer = await this.getSpawn({
       command: 'curl',

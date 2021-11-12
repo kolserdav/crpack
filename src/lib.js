@@ -1133,4 +1133,16 @@ to change run with the option:${Reset}${Bright} --renew-default`,
 
     return 0;
   }
+
+  /**
+   *
+   * @param {number} time
+   */
+  async wait(time) {
+    await new Promise((resolve) => {
+      setTimeout(() => {
+        resolve(0);
+      }, time);
+    });
+  }
 };

@@ -1,6 +1,6 @@
 # Create package
 
-A command line utility that runs the Node.js package as a systemd service via Nginx with a Let's Encrypt certificate. 
+A command line utility that runs the Node.js package as a systemd service via Nginx with a Let's Encrypt certificate.   
 
 ## Requirements
 

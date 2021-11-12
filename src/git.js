@@ -365,6 +365,11 @@ module.exports = class Employer {
       args: ['run', 'build'],
       options: {
         cwd: worker.pwd,
+        env: {
+          CWD: worker.pwd,
+          PWD: worker.pwd,
+          NODE_ENV: process.env.NODE_ENV || 'production',
+        },
       },
     });
     if (buildRes === 1 || buildRes === undefined) {

@@ -339,7 +339,10 @@ OPTIONS:
     }
 
     const install = await git.create();
-    console.log('install', install);
+    if (install === 1) {
+      return 1;
+    }
+
     console.info(this.info, 'Git enabled:', Blue, this.git, Reset);
     console.info(this.info, 'SSL enabled:', Blue, this.ssl, Reset);
     console.info(this.info, 'SSH config:', Blue, !this.git ? git.sshConfig : undefined, Reset);
@@ -374,6 +377,7 @@ OPTIONS:
     if (getVer === 1) {
       return 1;
     }
+    this.setPackageJson(path.resolve(__dirname, '../package.json'));
     const { version: currentVer } = this.packageJsonConfig;
     this.setPackageJson(cachePackagePath);
     const { version } = this.packageJsonConfig;

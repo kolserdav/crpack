@@ -107,6 +107,7 @@ class Factory extends Worker {
    *  ssl: '--ssl';
    *  git: '--git';
    *  cwd: '--cwd';
+   *  raw: '--raw';
    * }}
    */
   params = {
@@ -121,6 +122,7 @@ class Factory extends Worker {
     ssl: '--ssl',
     git: '--git',
     cwd: '--cwd',
+    raw: '--raw',
   };
 
   constructor() {
@@ -148,13 +150,14 @@ OPTIONS:
   --trace-warnings: show all warnings
   --renew-default: rewrite default cache nginx file
   --test: run in dev as prod
-  --port: local application port
+  --port [number]: local application port
   --disabled: don't add package to autorun
-  --node-env: application NODE_ENV
-  --nginx-path: nginx path  
+  --node-env [development | production]: application NODE_ENV
+  --nginx-path [absolute path]: nginx path  
   --ssl: create certificate with certbot
   --git: connect git server to automatic CI
-  --cwd: set project root
+  --cwd [absolute path]: set project root
+  --raw [absolute path or 'root']: path to clone of package.json from outside of project 
   `;
     const { showDefault, run, update } = this.props;
 
@@ -190,6 +193,7 @@ OPTIONS:
       ssl,
       git,
       cwd,
+      raw,
     } = this.params;
     if (argv.indexOf(traceWarnings) !== -1) {
       this.traceWarnings = true;
@@ -211,6 +215,15 @@ OPTIONS:
     }
     const portArg = argv.indexOf(port);
     if (portArg !== -1) {
+      if (this.traceWarnings) {
+        console.warn(
+          this.warning,
+          Yellow,
+          Dim,
+          'To port a port in your application, you must use process.env.PORT instead of static',
+          Reset
+        );
+      }
       const nextArg = process.argv[portArg + 1];
       if (!nextArg) {
         console.warn(this.warning, Yellow, 'Port value is missing while use --port option', Reset);
@@ -277,6 +290,33 @@ OPTIONS:
         );
       }
       this.nginxPath = nextArg ? nextArg : this.nginxPath;
+    }
+
+    const rawArg = argv.indexOf(raw);
+    if (rawArg !== -1) {
+      if (this.traceWarnings && !cwd) {
+        console.warn(
+          this.warning,
+          Yellow,
+          Dim,
+          'If you need set up application in root owner dir you can use --cwd option',
+          Reset,
+          Bright,
+          'crpack run --cwd /path/to/your/project/root'
+        );
+      }
+      const nextArg = process.argv[rawArg + 1];
+      if (!nextArg) {
+        console.warn(
+          this.warning,
+          Yellow,
+          'Link to raw package.json is missing while use --raw option',
+          Reset
+        );
+      }
+      const isRoot = nextArg === 'root';
+      this.configPath = nextArg && isRoot ? this.configPath : nextArg;
+      this.rawPackage = true;
     }
   }
 

@@ -33,6 +33,7 @@ const Dim = '\x1b[2m';
 const Blue = '\x1b[34m';
 
 /**
+ * @typedef {1 | string[]} ResultArrayString
  * @typedef {number | undefined} NumberUndefined
  * @typedef {1 | 0} Result
  * @typedef {1 | string} ResultString;
@@ -188,9 +189,15 @@ module.exports = class Worker {
    */
   nodeEnv;
 
+  /**
+   * @type {boolean}
+   */
+  rawPackage;
+
   constructor() {
     this.pwd = process.env.PROJECT_ROOT || process.cwd();
     this.npmPackageVersion;
+    this.rawPackage = false;
     this.nodeEnv = 'production';
     this.nginxPath = '/etc/nginx';
     this.nginxConfigPath = `${this.nginxPath}/nginx.conf`;
@@ -276,6 +283,7 @@ module.exports = class Worker {
     }).catch((e) => {
       if (!/AbortError/.test(e)) {
         if (args[0] === 'run' && args[1] === 'start' && new RegExp('Permission denied').test(e)) {
+          console.info('===================================================');
           console.warn(
             this.warning,
             Yellow,
@@ -295,18 +303,21 @@ module.exports = class Worker {
         if (command !== 'nginx' && args[0] !== '-t' && /\.conf syntax is ok/.test(e)) {
           console.warn(this.warning, Yellow, errorData, Reset);
         } else if (errorData) {
-          if (/fatal/.test(errorData)) {
-            console.error(this.error, Red, errorData, Reset);
-          } else {
-            console.info(this.info, Cyan, errorData, Reset);
+          console.info('____________________________________________________________________\n');
+          let color = Cyan;
+          let status = 'info';
+          if (/npm ERR/.test(errorData) || /fatal/.test(errorData) || /throw err/.test(errorData)) {
+            color = Red;
+            status = 'error';
           }
+          console.error(this[status], color, errorData, Reset);
         }
         if (_data) {
+          let color = Cyan;
           if (/fatal/.test(_data)) {
-            console.error(this.error, Red, _data, Reset);
-          } else {
-            console.info(this.info, Cyan, _data, Reset);
+            color = Red;
           }
+          console.info(this.info, color, _data, Reset);
         }
         if (command !== 'nginx' && args[0] !== '-t' && /\.conf syntax is ok/.test(e)) {
           console.error(this.error, `Run command ${command} end with error`, Red, e, Reset);
@@ -1070,6 +1081,7 @@ to change run with the option:${Reset}${Bright} --renew-default`,
       console.error(this.error, Red, 'Property "scripts.start" is missing on package.json');
       return 1;
     }
+
     this.packageName = this.packageJsonConfig.name;
 
     const preStartPackage = await this.getSpawn({
@@ -1091,10 +1103,27 @@ to change run with the option:${Reset}${Bright} --renew-default`,
       },
     });
     if (preStartPackage === 1) {
-      return 1;
+      if (!this.rawPackage) {
+        return 1;
+      }
     }
     if (typeof preStartPackage === 'string') {
       console.info(this.info, Blue, preStartPackage, Reset);
+    }
+    if (this.rawPackage && preStartPackage !== 0) {
+      return await this.fromRawPackage();
+    } else {
+      console.warn(
+        this.warning,
+        Yellow,
+        `Maybe need create package from raw?`,
+        Reset,
+        Bright,
+        'crpack --raw /path/to/clone/of/package.json',
+        Yellow,
+        'then it will be necessary to delete all files from the project root !',
+        Reset
+      );
     }
 
     if (new Date().getTime() - startTime < MINIMUM_WAIT_ABORT) {
@@ -1127,6 +1156,90 @@ to change run with the option:${Reset}${Bright} --renew-default`,
     return 0;
   }
 
+  async fromRawPackage() {
+    const projectDir = fs.readdirSync(this.pwd);
+    if (projectDir.length !== 0) {
+      console.error(
+        this.error,
+        Red,
+        'Working directory for raw package is not empty',
+        Reset,
+        Bright,
+        this.pwd,
+        Reset
+      );
+      return 1;
+    }
+
+    const _installRes = await this.installDependencies();
+    if (_installRes === 1) {
+      return 1;
+    }
+
+    const _buildRes = await this.buildPackage();
+    if (_buildRes === 1) {
+      return 1;
+    }
+
+    // restart of restart
+    return await this.restartService();
+  }
+
+  /**
+   *
+   * @returns {Promise<Result>}
+   */
+  async buildPackage() {
+    const buildRes = await this.getSpawn({
+      command: `${this.npmPath}/npm`,
+      args: ['run', 'build'],
+      options: {
+        cwd: this.pwd,
+        env: this.getEnv('production'),
+      },
+    });
+    if (buildRes === 1 || buildRes === undefined) {
+      return 1;
+    }
+    console.info(this.info, Cyan, buildRes, Reset);
+    return 0;
+  }
+
+  /**
+   *
+   * @param {string} _path
+   * @returns
+   */
+  getEnv(_path) {
+    return {
+      CWD: this.pwd,
+      PWD: this.pwd,
+      NODE_ENV: process.env.NODE_ENV || _path,
+      PATH: `/sbin:/bin:/usr/sbin:/usr/bin:${this.npmPath.replace(/\/npm/, '')}`,
+    };
+  }
+
+  /**
+   *
+   * @returns {Promise<Result>}
+   */
+  async installDependencies() {
+    console.log(this.pwd);
+    const installRes = await this.getSpawn({
+      command: `${this.npmPath}/npm`,
+      args: ['install'],
+      options: {
+        cwd: this.pwd,
+        env: this.getEnv('development'),
+      },
+    });
+    if (installRes === 1 || installRes === undefined) {
+      return 1;
+    }
+    console.info(this.info, Cyan, installRes, Reset);
+    return 0;
+  }
+
   /**
    *
    * @param {number} time
@@ -1136,6 +1249,45 @@ to change run with the option:${Reset}${Bright} --renew-default`,
       setTimeout(() => {
         resolve(0);
       }, time);
+    });
+  }
+
+  /**
+   *
+   * @param {string} dirPath
+   * @returns {ResultArrayString}
+   */
+  readDir(dirPath) {
+    let result = [];
+    try {
+      result = fs.readdirSync(dirPath);
+    } catch (e) {
+      console.error(this.error, Red, 'Error read dir', Reset, Bright, dirPath, Reset, e);
+      return 1;
+    }
+    return result;
+  }
+
+  /**
+   * @typedef {(data: string) => string} OnLineHandler
+   * @param {string} cronPath
+   * @param {OnLineHandler} cb
+   * @returns {Promise<string>}
+   */
+  async readByLines(cronPath, cb) {
+    const fileStream = this.getReadSteam(cronPath);
+    const rl = readline.createInterface({
+      input: fileStream,
+      crlfDelay: Infinity,
+    });
+    return new Promise((resolve) => {
+      let lines = '';
+      setTimeout(() => {
+        resolve(lines);
+      }, 1000);
+      rl.on('line', (data) => {
+        lines += cb(data);
+      });
     });
   }
 };

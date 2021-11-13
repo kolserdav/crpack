@@ -226,6 +226,15 @@ module.exports = class Employer {
     return 0;
   }
 
+  searchCronConfig() {
+    const cronRoot = '/etc/cron.d/';
+    const cronDir = worker.readDir(cronRoot);
+    if (cronDir === 1) {
+      return 1;
+    }
+    console.log(cronDir);
+  }
+
   /**
    * @returns {Promise<Result>}
    */
@@ -245,39 +254,31 @@ module.exports = class Employer {
       );
       return 1;
     }
-    const fileStream = worker.getReadSteam(cronPath);
 
-    const rl = readline.createInterface({
-      input: fileStream,
-      crlfDelay: Infinity,
-    });
     const updateStr = '* * * * * root crpack update';
+
     let size = 0;
     let check = false;
     let root = false;
-    const _lines = await new Promise((resolve) => {
-      let lines = '';
-      setTimeout(() => {
-        resolve(lines);
-      }, 1000);
-      rl.on('line', (data) => {
-        let line = data.toString();
-        size += line.length;
-        let _line = line;
-        if (/PATH/.test(line)) {
-          _line = new RegExp(worker.npmPath).test(line) ? line : `${line}:${worker.npmPath}`;
-        } else if (/PROJECT_ROOT/.test(line)) {
-          root = true;
-          _line = `PROJECT_ROOT=${worker.pwd}`;
-        }
-        lines += `${_line}\n`;
-        if (line.match(/crpack update/)) {
-          check = true;
-        }
-      });
+    let _path = '';
+    const lines = await worker.readByLines(cronPath, (data) => {
+      let line = data.toString();
+      size += line.length;
+      let _line = line;
+      if (/PATH/.test(line)) {
+        _line = new RegExp(worker.npmPath).test(line) ? line : `${line}:${worker.npmPath}`;
+        _path = _line;
+      } else if (/PROJECT_ROOT/.test(line)) {
+        root = true;
+        _line = `PROJECT_ROOT=${worker.pwd}`;
+      }
+      if (line.match(/crpack update/)) {
+        check = true;
+      }
+      return `${_line}\n`;
     });
 
-    const writeRes = worker.writeFile(cronPath, _lines);
+    const writeRes = worker.writeFile(cronPath, lines);
     if (writeRes === 1) {
       return 1;
     }
@@ -294,7 +295,7 @@ module.exports = class Employer {
       if (cronData === 1) {
         return 1;
       }
-      let _cronData = `PROJECT_ROOT=${worker.pwd}\n${cronData}`;
+      let _cronData = `PROJECT_ROOT=${worker.pwd}\nPATH${cronData}`;
       const wRes = await worker.writeFile(cronPath, _cronData);
       if (wRes === 1) {
         return 1;
@@ -330,14 +331,14 @@ module.exports = class Employer {
         return 1;
       }
 
-      const installRes = await this.installDependencies();
+      const installRes = await worker.installDependencies();
       if (installRes === 1) {
         return 1;
       }
 
       await worker.wait(2000);
 
-      const buildPackage = await this.buildPackage();
+      const buildPackage = await worker.buildPackage();
       if (buildPackage === 1) {
         return;
       }
@@ -354,60 +355,6 @@ module.exports = class Employer {
         return 1;
       }
     }
-    return 0;
-  }
-
-  /**
-   *
-   * @returns {Promise<Result>}
-   */
-  async buildPackage() {
-    const buildRes = await worker.getSpawn({
-      command: `${worker.npmPath}/npm`,
-      args: ['run', 'build', '--openssl-legacy-provider'],
-      options: {
-        cwd: worker.pwd,
-        env: this.getEnv('production'),
-      },
-    });
-    if (buildRes === 1 || buildRes === undefined) {
-      return 1;
-    }
-    console.info(worker.info, Cyan, buildRes, Reset);
-    return 0;
-  }
-
-  /**
-   *
-   * @param {string} _path
-   * @returns
-   */
-  getEnv(_path) {
-    return {
-      CWD: worker.pwd,
-      PWD: worker.pwd,
-      NODE_ENV: process.env.NODE_ENV || _path,
-      PATH: `/sbin:/bin:/usr/sbin:/usr/bin:${worker.npmPath.replace(/\/npm/, '')}`,
-    };
-  }
-
-  /**
-   *
-   * @returns {Promise<Result>}
-   */
-  async installDependencies() {
-    const installRes = await worker.getSpawn({
-      command: `${worker.npmPath}/npm`,
-      args: ['install'],
-      options: {
-        cwd: worker.pwd,
-        env: this.getEnv('development'),
-      },
-    });
-    if (installRes === 1 || installRes === undefined) {
-      return 1;
-    }
-    console.info(worker.info, Cyan, installRes, Reset);
     return 0;
   }
 

@@ -1,0 +1,1 @@
+sudo ../crpack/bin/crpack.js run --disabled --git --raw /home/kol/Projects/boring/package.json --cwd /home/kol/Projects/bt/

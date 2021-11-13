@@ -84,9 +84,16 @@ module.exports = class Employer {
     const ssh = '/root/.ssh';
     this.sshConfig = `${ssh}/config`;
     this.sshConfigDefault = path.resolve(__dirname, '../.crpack/templates/git/ssh/config');
-    this.sshHost = 'gitlab.com';
+    worker.setPackageJson(path.resolve(worker.pwd, 'package.json'));
+    const { repository } = worker.packageJsonConfig;
+    let origin = 'gitlab.com';
+    if (repository) {
+      const host = repository.match(/https?:\/\/[a-zA-Z0-9\.\-_]+\//);
+      origin = host ? host[0].replace(/https?:\/\//, '').replace(/\//g, '') : origin;
+    }
+    this.sshHost = origin;
     this.configExists = false;
-    this.secretKeyPath = `${ssh}/gitlab`;
+    this.secretKeyPath = `${ssh}/${origin.replace(/\.\w+/, '')}`;
   }
 
   /**
@@ -187,10 +194,10 @@ module.exports = class Employer {
   }
 
   /**
-   *
+   * @param {boolean} raw
    * @returns {Promise<Result>}
    */
-  async create() {
+  async create(raw = false) {
     // set config
     worker.setPackageJson(worker.configPath);
     const config = this.changeConfig();
@@ -213,9 +220,11 @@ module.exports = class Employer {
     }
 
     // update
-    const updateRes = await this.update(repository);
-    if (updateRes === 1) {
-      return 1;
+    if (!raw) {
+      const updateRes = await this.update(repository);
+      if (updateRes === 1) {
+        return 1;
+      }
     }
 
     // cron
@@ -324,6 +333,9 @@ module.exports = class Employer {
       return 1;
     }
 
+    /**
+     * @type {NumberBoolean}
+     */
     const compareRes = await this.compareCommits(repository);
     if (compareRes === 1) {
       return 1;
@@ -332,9 +344,6 @@ module.exports = class Employer {
     let diff = false;
     if (typeof compareRes === 'boolean') {
       diff = !compareRes;
-    }
-    if (worker.rawPackage) {
-      diff = false;
     }
     if (diff) {
       const pullRes = await this.pull(repository, 'master');

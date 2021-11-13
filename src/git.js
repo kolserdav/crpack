@@ -226,13 +226,30 @@ module.exports = class Employer {
     return 0;
   }
 
+  /**
+   * @returns {ResultString}
+   */
   searchCronConfig() {
     const cronRoot = '/etc/cron.d/';
     const cronDir = worker.readDir(cronRoot);
     if (cronDir === 1) {
       return 1;
     }
-    console.log(cronDir);
+
+    const { name } = worker.packageJsonConfig;
+    worker.packageName = name;
+
+    const theSame = cronDir
+      .map((item) => {
+        if (item === name) {
+          return item;
+        }
+      })
+      .filter((item) => (item ? item : undefined))[0];
+    if (!theSame) {
+      return path.resolve(cronRoot, name);
+    }
+    return theSame;
   }
 
   /**
@@ -240,67 +257,58 @@ module.exports = class Employer {
    */
   async createCron() {
     await worker.setNpmPath();
-    const cronPath = '/etc/cron.d/0hourly';
-
-    if (!worker.fileExists(cronPath)) {
-      console.error(
-        worker.error,
-        Red,
-        'Cron config file is not exists',
-        Reset,
-        Bright,
-        cronPath,
-        Reset
-      );
+    const cronPath = this.searchCronConfig();
+    if (cronPath === 1) {
       return 1;
     }
 
-    const updateStr = '* * * * * root crpack update';
+    if (!worker.fileExists(cronPath)) {
+      const cronDirD = cronPath.replace(new RegExp(worker.packageName), '');
+      if (!worker.fileExists(cronDirD)) {
+        console.error(
+          worker.error,
+          Red,
+          'Cron config dir is not exists',
+          Reset,
+          Bright,
+          cronDirD,
+          Reset
+        );
+        return 1;
+      }
 
-    let size = 0;
-    let check = false;
-    let root = false;
-    let _path = '';
+      const defaultCron = path.resolve(__dirname, '../.crpack/templates/git/cron/package');
+      const defData = worker.readFile(defaultCron);
+      if (defData === 1) {
+        return 1;
+      }
+      const readRes = worker.writeFile(cronPath, defData);
+      if (readRes === 1) {
+        return 1;
+      }
+    } else if (worker.traceWarnings) {
+      console.warn(worker.warning, Yellow, Dim, 'Make sure that crond is running', Reset);
+    }
+
     const lines = await worker.readByLines(cronPath, (data) => {
       let line = data.toString();
-      size += line.length;
       let _line = line;
       if (/PATH/.test(line)) {
         _line = new RegExp(worker.npmPath).test(line) ? line : `${line}:${worker.npmPath}`;
-        _path = _line;
       } else if (/PROJECT_ROOT/.test(line)) {
-        root = true;
         _line = `PROJECT_ROOT=${worker.pwd}`;
-      }
-      if (line.match(/crpack update/)) {
-        check = true;
       }
       return `${_line}\n`;
     });
+    if (lines === 1) {
+      return 1;
+    }
 
     const writeRes = worker.writeFile(cronPath, lines);
     if (writeRes === 1) {
       return 1;
     }
-
-    if (!check) {
-      const addLineRes = worker.appendLine(cronPath, updateStr);
-      if (addLineRes === 1) {
-        return 1;
-      }
-    }
-
-    if (!root) {
-      const cronData = worker.readFile(cronPath);
-      if (cronData === 1) {
-        return 1;
-      }
-      let _cronData = `PROJECT_ROOT=${worker.pwd}\nPATH${cronData}`;
-      const wRes = await worker.writeFile(cronPath, _cronData);
-      if (wRes === 1) {
-        return 1;
-      }
-    }
+    console.info(worker.info, 'Cron file saved', Blue, cronPath, Reset);
 
     return 0;
   }

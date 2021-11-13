@@ -1,8 +1,6 @@
 # Create package
 
-
-A command line utility that runs the Node.js package as a systemd service via Nginx with a Let's Encrypt certificate.   
-
+A command line utility that runs the Node.js package as a systemd service via Nginx with a Let's Encrypt certificate.
 
 ## Requirements
 
@@ -37,7 +35,7 @@ npm i -g crpack
 ## Run
 
 ```
-sudo crpack run
+sudo crpack run --trace-warnings
 ```
 
 ## Examples
@@ -59,6 +57,8 @@ sudo crpack run --port 3001
 ```
 crpack -h
 ```
+
+**More [examples](./examples)**
 
 # Other
 

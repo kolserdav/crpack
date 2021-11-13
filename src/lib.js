@@ -1030,12 +1030,22 @@ to change run with the option:${Reset}${Bright} --renew-default`,
   }
 
   /**
-   *
+   * @typedef {fs.ReadStream | 1} ResultReadStream
    * @param {string} fileName
-   * @returns {fs.ReadStream}
+   * @returns {ResultReadStream}
    */
   getReadSteam(fileName) {
-    return fs.createReadStream(fileName);
+    /**
+     * @type {ResultReadStream}
+     */
+    let readStream;
+    try {
+      readStream = fs.createReadStream(fileName);
+    } catch (e) {
+      console.error(this.error, Red, 'Error create read stream of file', fileName, Reset, e);
+      return 1;
+    }
+    return readStream;
   }
 
   /**
@@ -1110,20 +1120,24 @@ to change run with the option:${Reset}${Bright} --renew-default`,
     if (typeof preStartPackage === 'string') {
       console.info(this.info, Blue, preStartPackage, Reset);
     }
+
     if (this.rawPackage && preStartPackage !== 0) {
       return await this.fromRawPackage();
     } else {
-      console.warn(
-        this.warning,
-        Yellow,
-        `Maybe need create package from raw?`,
-        Reset,
-        Bright,
-        'crpack --raw /path/to/clone/of/package.json',
-        Yellow,
-        'then it will be necessary to delete all files from the project root !',
-        Reset
-      );
+      if (this.traceWarnings) {
+        console.warn(
+          this.warning,
+          Yellow,
+          Dim,
+          `Maybe need create package from raw?`,
+          Reset,
+          'crpack --raw /path/to/clone/of/package.json',
+          Yellow,
+          Dim,
+          'Then it will be necessary to delete all files from the project root!',
+          Reset
+        );
+      }
     }
 
     if (new Date().getTime() - startTime < MINIMUM_WAIT_ABORT) {
@@ -1272,10 +1286,13 @@ to change run with the option:${Reset}${Bright} --renew-default`,
    * @typedef {(data: string) => string} OnLineHandler
    * @param {string} cronPath
    * @param {OnLineHandler} cb
-   * @returns {Promise<string>}
+   * @returns {Promise<ResultString>}
    */
   async readByLines(cronPath, cb) {
     const fileStream = this.getReadSteam(cronPath);
+    if (fileStream === 1) {
+      return 1;
+    }
     const rl = readline.createInterface({
       input: fileStream,
       crlfDelay: Infinity,

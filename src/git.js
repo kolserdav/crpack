@@ -80,6 +80,11 @@ module.exports = class Employer {
    */
   configExists;
 
+  /**
+   * @type {boolean}
+   */
+  err;
+
   constructor() {
     const ssh = '/root/.ssh';
     this.sshConfig = `${ssh}/config`;
@@ -87,7 +92,17 @@ module.exports = class Employer {
     worker.setPackageJson(path.resolve(worker.pwd, 'package.json'));
     const { repository } = worker.packageJsonConfig;
     let origin = 'gitlab.com';
+    this.err = false;
     if (repository) {
+      if (!/^git@/.test(repository)) {
+        this.err = true;
+        console.error(
+          worker.error,
+          Red,
+          "The repository url is not ssh. Restarting after changing Git won't work.",
+          Reset
+        );
+      }
       const host = repository.match(/https?:\/\/[a-zA-Z0-9\.\-_]+\//);
       origin = host ? host[0].replace(/https?:\/\//, '').replace(/\//g, '') : origin;
     }
@@ -197,6 +212,9 @@ module.exports = class Employer {
    * @returns {Promise<Result>}
    */
   async create() {
+    if (this.err) {
+      return 1;
+    }
     // set config
     worker.setPackageJson(worker.configPath);
     const config = this.changeConfig();

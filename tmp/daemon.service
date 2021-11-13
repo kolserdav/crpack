@@ -10,7 +10,7 @@ User=root
 Group=root
 Environment=PATH=/usr/bin:/usr/local/bin:/home/kol/.nvm/versions/node/v16.10.0/bin
 Environment=NODE_ENV=production
-Environment=PORT=30012
+Environment=PORT=3000
 WorkingDirectory=/home/kol/Projects/crpack
 ExecStart=/home/kol/.nvm/versions/node/v16.10.0/bin/npm run start
 SyslogIdentifier=crpack

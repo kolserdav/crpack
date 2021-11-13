@@ -398,7 +398,7 @@ OPTIONS:
       return 1;
     }
 
-    const install = await git.create(this.rawPackage);
+    const install = await git.create();
     if (install === 1) {
       return 1;
     }

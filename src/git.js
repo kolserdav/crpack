@@ -194,10 +194,9 @@ module.exports = class Employer {
   }
 
   /**
-   * @param {boolean} raw
    * @returns {Promise<Result>}
    */
-  async create(raw = false) {
+  async create() {
     // set config
     worker.setPackageJson(worker.configPath);
     const config = this.changeConfig();
@@ -217,14 +216,6 @@ module.exports = class Employer {
     if (!repository) {
       console.error(worker.error, Red, 'Repository is not specified in package.json', Reset);
       return 1;
-    }
-
-    // update
-    if (!raw) {
-      const updateRes = await this.update(repository);
-      if (updateRes === 1) {
-        return 1;
-      }
     }
 
     // cron

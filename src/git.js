@@ -333,6 +333,9 @@ module.exports = class Employer {
     if (typeof compareRes === 'boolean') {
       diff = !compareRes;
     }
+    if (worker.rawPackage) {
+      diff = false;
+    }
     if (diff) {
       const pullRes = await this.pull(repository, 'master');
       if (pullRes === 1) {

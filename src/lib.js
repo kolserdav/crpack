@@ -1254,7 +1254,6 @@ to change run with the option:${Reset}${Bright} --renew-default`,
    * @returns {Promise<Result>}
    */
   async installDependencies() {
-    console.log(this.pwd);
     const installRes = await this.getSpawn({
       command: `${this.npmPath}/npm`,
       args: ['install'],

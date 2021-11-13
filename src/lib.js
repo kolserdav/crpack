@@ -370,7 +370,6 @@ module.exports = class Worker {
     const nginxRes = await this.getSpawn({
       command,
       args,
-      options: { cwd: this.pwd },
     });
     if (nginxRes === 1 || nginxRes === undefined) {
       return 1;
@@ -1093,32 +1092,37 @@ to change run with the option:${Reset}${Bright} --renew-default`,
     }
 
     this.packageName = this.packageJsonConfig.name;
-
-    const preStartPackage = await this.getSpawn({
-      command: `${this.npmPath}/npm`,
-      args: ['run', 'start'],
-      options: {
-        cwd: this.pwd,
-        signal,
-        env: {
-          PORT: 5151,
-          NODE_ENV: process.env.NODE_ENV,
-          PATH: process.env.PATH,
+    /**
+     * @type {ResultUndefined}
+     */
+    let preStartPackage = 1;
+    if (!this.rawPackage) {
+      preStartPackage = await this.getSpawn({
+        command: `${this.npmPath}/npm`,
+        args: ['run', 'start'],
+        options: {
+          cwd: this.pwd,
+          signal,
+          env: {
+            PORT: 5151,
+            NODE_ENV: process.env.NODE_ENV,
+            PATH: process.env.PATH,
+          },
         },
-      },
-      onData: () => {
-        setTimeout(() => {
-          controller.abort();
-        }, MAXIMUM_WAIT_ABORT);
-      },
-    });
-    if (preStartPackage === 1) {
-      if (!this.rawPackage) {
-        return 1;
+        onData: () => {
+          setTimeout(() => {
+            controller.abort();
+          }, MAXIMUM_WAIT_ABORT);
+        },
+      });
+      if (preStartPackage === 1) {
+        if (!this.rawPackage) {
+          return 1;
+        }
       }
-    }
-    if (typeof preStartPackage === 'string') {
-      console.info(this.info, Blue, preStartPackage, Reset);
+      if (typeof preStartPackage === 'string') {
+        console.info(this.info, Blue, preStartPackage, Reset);
+      }
     }
 
     if (this.rawPackage && preStartPackage !== 0) {
@@ -1185,6 +1189,8 @@ to change run with the option:${Reset}${Bright} --renew-default`,
       return 1;
     }
 
+    const cloneRes = await this.clone();
+
     const _installRes = await this.installDependencies();
     if (_installRes === 1) {
       return 1;
@@ -1194,9 +1200,19 @@ to change run with the option:${Reset}${Bright} --renew-default`,
     if (_buildRes === 1) {
       return 1;
     }
-
+    this.rawPackage = false;
     // restart of restart
     return await this.restartService();
+  }
+
+  async clone() {
+    const cloneRes = await this.getSpawn({
+      command: 'git',
+      args: ['clone', this.packageJsonConfig.repository, this.pwd],
+    });
+    if (cloneRes === 1) {
+      return 1;
+    }
   }
 
   /**

@@ -249,7 +249,7 @@ module.exports = class Employer {
     if (!theSame) {
       return path.resolve(cronRoot, name);
     }
-    return theSame;
+    return path.resolve(cronRoot, theSame);
   }
 
   /**
@@ -263,7 +263,7 @@ module.exports = class Employer {
     }
 
     if (!worker.fileExists(cronPath)) {
-      const cronDirD = cronPath.replace(new RegExp(worker.packageName), '');
+      const cronDirD = cronPath.replace(new RegExp(worker.packageJsonConfig.name), '');
       if (!worker.fileExists(cronDirD)) {
         console.error(
           worker.error,

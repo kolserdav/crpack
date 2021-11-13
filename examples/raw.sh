@@ -1,1 +1,1 @@
-crpack run --disabled --git --raw /home/user/Projects/project-package/package.json --cwd /home/user/Projects/project-target/
+sudo crpack run --disabled --git --raw /home/user/Projects/project-package/package.json --cwd /home/user/Projects/project-target/

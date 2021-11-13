@@ -15,6 +15,7 @@ const Employer = require('./git');
 
 const git = new Employer();
 
+const Red = '\x1b[31m';
 const Reset = '\x1b[0m';
 const Bright = '\x1b[1m';
 const Yellow = '\x1b[33m';
@@ -25,6 +26,7 @@ const Cyan = '\x1b[36m';
 const Blink = '\x1b[5m';
 
 /**
+ * @typedef {1 | void} ResultVoid
  * @typedef {1 | 0} Result
  */
 
@@ -130,7 +132,6 @@ class Factory extends Worker {
     this.arg = process.argv[2];
     this.ssl = false;
     this.git = false;
-    const argv = process.argv;
     this.certbotExe = '/snap/bin/certbot';
     this.setPackageJsonSelf();
     this.disabled = false;
@@ -159,14 +160,18 @@ OPTIONS:
   --cwd [absolute path]: set project root
   --raw [absolute path or 'root']: path to clone of package.json from outside of project 
   `;
+  }
+
+  commands() {
+    const argv = process.argv;
     const { showDefault, run, update } = this.props;
 
-    /**
-     * Commands
-     */
     if (argv.indexOf(run) !== -1) {
       this.arg = run;
-      this.setAdditional();
+      const additiotals = this.arguments();
+      if (additiotals === 1) {
+        return 1;
+      }
     }
     if (argv.indexOf(showDefault) !== -1) {
       this.arg = showDefault;
@@ -177,9 +182,9 @@ OPTIONS:
   }
 
   /**
-   * Options
+   * @returns {ResultVoid}
    */
-  setAdditional() {
+  arguments() {
     const argv = process.argv;
     const {
       traceWarnings,
@@ -260,6 +265,12 @@ OPTIONS:
       const nextArg = process.argv[cwdArg + 1];
       if (!nextArg) {
         console.warn(this.warning, Yellow, 'CWD value is missing while use --cwd option', Reset);
+      }
+      if (nextArg) {
+        if (!this.fileExists(nextArg)) {
+          console.error(this.error, Red, 'Current working dir is not found', Reset, nextArg);
+          return 1;
+        }
       }
       this.pwd = nextArg ? nextArg : this.pwd;
     }
@@ -441,6 +452,7 @@ OPTIONS:
     if (getVer === 1) {
       return 1;
     }
+
     this.setPackageJson(path.resolve(__dirname, '../package.json'));
     const { version: currentVer } = this.packageJsonConfig;
     this.setPackageJson(cachePackagePath);
@@ -566,8 +578,13 @@ OPTIONS:
 
   /**
    * Commands map
+   * @returns {Promise<ResultVoid>}
    */
   async run() {
+    const commandsRes = this.commands();
+    if (commandsRes === 1) {
+      return 1;
+    }
     switch (this.arg) {
       case this.props.showDefault:
         const result = await this.getSpawn({
@@ -594,7 +611,8 @@ OPTIONS:
       case this.props.update:
         const path = require('path');
         this.setPackageJson(path.resolve(this.pwd, 'package.json'));
-        const updateRes = await git.update(this.packageJsonConfig.repository);
+        this.repository = this.packageJsonConfig.repository;
+        const updateRes = await git.update(this.repository);
         if (updateRes === 1) {
           console.warn(this.warning, Yellow, 'Update script is not success', Reset);
         } else {
@@ -623,5 +641,8 @@ Try run ${Bright} crpack -h
 const r = new Factory();
 
 (async () => {
-  await r.run();
+  const runRes = await r.run();
+  if (runRes) {
+    console.info(r.info, 'Script end with code', runRes);
+  }
 })();

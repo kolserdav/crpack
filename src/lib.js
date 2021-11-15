@@ -659,100 +659,85 @@ to change run with the option:${Reset}${Bright} --renew-default`,
     // TODO rewrite
     const confDValue = 'conf.d/*.conf';
     let _nginxConfig = { ...nginxConfig };
-    if (!_nginxConfig.http) {
-      if (!subConfig) {
-        console.error(
-          this.error,
-          Red,
-          `Section http is missing on ${JSON.stringify(_nginxConfig)}`,
-          Reset
-        );
-        return 1;
-      }
-    } else {
-      const { http } = nginxConfig;
-      const { http: _http } = _nginxConfig;
 
-      if (http !== undefined && !http.server) {
-        const confDPath = `${this.nginxPath}/conf.d`;
-        const confDItems = fs.readdirSync(confDPath);
-        if (confDItems.length !== undefined) {
-          const theSameProm = confDItems.map((item) => this.getNginxConfig(`${confDPath}/${item}`));
-          const theSame = await Promise.all(theSameProm);
-          const _theSame = theSame.map((item, index) => {
-            if (item.server) {
-              if (item.server.server_name === this.domain) {
-                this.nginxConfigDPath = `${this.nginxPath}/conf.d/${confDItems[index]}`;
-                return item.server;
-              }
-            }
-          });
-          if (_theSame) {
-            if (_theSame[0]) {
-              return _theSame[0];
-            }
+    const { http } = nginxConfig;
+    const { http: _http } = _nginxConfig;
+
+    const confDPath = `${this.nginxPath}/conf.d`;
+    const confDItems = fs.readdirSync(confDPath);
+    if (confDItems.length !== undefined) {
+      const theSameProm = confDItems.map((item) => this.getNginxConfig(`${confDPath}/${item}`));
+      const theSame = await Promise.all(theSameProm);
+      const _theSame = theSame.map((item, index) => {
+        if (item.server) {
+          if (item.server.server_name === this.domain) {
+            this.nginxConfigDPath = `${this.nginxPath}/conf.d/${confDItems[index]}`;
+            return item.server;
           }
         }
-      }
-
-      const keys = Object.keys(http);
-      let confD = false;
-      let serverC = false;
-      for (let i = 0; keys[i]; i++) {
-        const key = keys[i];
-        const values = http[key];
-        switch (key) {
-          case 'include':
-            if (typeof values !== 'string') {
-              values.map((value) => {
-                if (value === confDValue) {
-                  confD = true;
-                }
-              });
-            } else {
-              if (values === confDValue) {
-                confD = true;
-              }
-            }
-            break;
-          case 'server':
-            if (typeof values.length !== 'undefined') {
-              const allPromises = await values.map(async (value) => {
-                if (value.server_name === this.domain) {
-                  serverC = true;
-                  return this.changeNginxServerSection(value);
-                }
-                return value;
-              });
-              _nginxConfig.http.server = await Promise.all(allPromises);
-            } else {
-              if (values !== undefined) {
-                if (values.server_name === this.domain) {
-                  serverC = true;
-                  _nginxConfig.http.server = await this.changeNginxServerSection(values);
-                }
-              }
-            }
-            break;
-        }
-      }
-      // add include conf.d if needed
-      if (!confD) {
-        if (typeof _http.include === 'string') {
-          if (_http.include !== confDValue) {
-            _http.include = [_http.include, confDValue];
-          }
-        } else {
-          _http.include.push(confDValue);
-        }
-      }
-      // get server config from conf.d
-      if (!serverC) {
-        await this.changeNginxServerSection();
+      });
+      if (!_theSame) {
+        this.nginxConfigDPath = `${this.nginxPath}/conf.d/${this.domain}.conf`;
       }
     }
 
-    return _nginxConfig;
+    const keys = Object.keys(http);
+    let confD = false;
+    let serverC = false;
+    for (let i = 0; keys[i]; i++) {
+      const key = keys[i];
+      const values = http[key];
+      switch (key) {
+        case 'include':
+          if (typeof values !== 'string') {
+            values.map((value) => {
+              if (value === confDValue) {
+                confD = true;
+              }
+            });
+          } else {
+            if (values === confDValue) {
+              confD = true;
+            }
+          }
+          break;
+        case 'server':
+          if (typeof values.length !== 'undefined') {
+            const allPromises = await values.map(async (value) => {
+              if (value.server_name === this.domain) {
+                serverC = true;
+                return this.changeNginxServerSection(value);
+              }
+              return value;
+            });
+            _nginxConfig.http.server = await Promise.all(allPromises);
+          } else {
+            if (values !== undefined) {
+              if (values.server_name === this.domain) {
+                serverC = true;
+                _nginxConfig.http.server = await this.changeNginxServerSection(values);
+              }
+            }
+          }
+          break;
+      }
+    }
+    // add include conf.d if needed
+    if (!confD) {
+      if (typeof _http.include === 'string') {
+        if (_http.include !== confDValue) {
+          _http.include = [_http.include, confDValue];
+        }
+      } else {
+        _http.include.push(confDValue);
+      }
+    }
+    // get server config from conf.d
+    if (!serverC) {
+      await this.changeNginxServerSection();
+    }
+
+    return _nginxConfig.http.server;
   }
 
   /**

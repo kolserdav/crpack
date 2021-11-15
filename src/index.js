@@ -507,8 +507,13 @@ OPTIONS:
     }
     this.domain = await this.setDomain();
     const nginxData = await this.createNginxFile(nginxConfig);
-    if (nginxData === 1) {
-      return 1;
+    if (nginxData !== 1) {
+      await this.writeNginxConfig(
+        this.prod || this.test ? this.nginxConfigPath : './tmp/nginx.conf',
+        nginxConfig
+      );
+    } else {
+      result = 1;
     }
     return result;
   }

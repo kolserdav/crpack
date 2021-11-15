@@ -103,8 +103,8 @@ module.exports = class Employer {
           Reset
         );
       }
-      const host = repository.match(/https?:\/\/[a-zA-Z0-9\.\-_]+\//);
-      origin = host ? host[0].replace(/https?:\/\//, '').replace(/\//g, '') : origin;
+      const host = repository.match(/git@[a-zA-Z0-9\.\-_]+:/);
+      origin = host ? host[0].replace(/git@/, '').replace(/:/g, '') : origin;
     }
     this.sshHost = origin;
     this.configExists = false;
@@ -355,7 +355,7 @@ module.exports = class Employer {
       diff = !compareRes;
     }
     if (diff) {
-      const pullRes = await this.pull(repository, 'master');
+      const pullRes = await worker.pull(repository, 'master');
       if (pullRes === 1) {
         return 1;
       }
@@ -385,24 +385,6 @@ module.exports = class Employer {
       }
     }
     return 0;
-  }
-
-  /**
-   * @param {string} repository
-   * @param {string} branch
-   * @returns {Promise<ResultUndefined>}
-   */
-  async pull(repository, branch = 'master') {
-    const res = await worker.getSpawn({
-      command: 'git',
-      args: ['pull', `${repository}`, branch],
-      options: {
-        cwd: worker.pwd,
-      },
-    });
-    if (res === 1) {
-      return 1;
-    }
   }
 
   /**

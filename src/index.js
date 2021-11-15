@@ -381,25 +381,25 @@ OPTIONS:
     if (setUpPack === 1) {
       return 1;
     }
+    if (this.git) {
+      const sshConfig = await git.setSshHost();
+      if (sshConfig === 1) {
+        return 1;
+      }
+
+      const install = await git.create();
+      if (install === 1) {
+        return 1;
+      }
+
+      const secretKeyPath = await git.setSecretKeyPath();
+      if (secretKeyPath === 1) {
+        return 1;
+      }
+    }
 
     const restartRes = await this.restartService();
     if (restartRes === 1) {
-      return 1;
-    }
-
-    //// git server connection
-    const sshConfig = await git.setSshHost();
-    if (sshConfig === 1) {
-      return 1;
-    }
-
-    const secretKeyPath = await git.setSecretKeyPath();
-    if (secretKeyPath === 1) {
-      return 1;
-    }
-
-    const install = await git.create();
-    if (install === 1) {
       return 1;
     }
 

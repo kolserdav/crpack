@@ -725,7 +725,6 @@ to change run with the option:${Reset}${Bright} --renew-default`,
           const theSameProm = confDItems.map((item) => this.getNginxConfig(`${confDPath}/${item}`));
           const theSame = await Promise.all(theSameProm);
           const _theSame = theSame.map((item, index) => {
-            console.log(item.server);
             if (item.server) {
               if (item.server.server_name === this.domain) {
                 this.nginxConfigDPath = `${this.nginxPath}/conf.d/${confDItems[index]}`;
@@ -1136,11 +1135,7 @@ to change run with the option:${Reset}${Bright} --renew-default`,
           Dim,
           `Maybe need create package from raw?`,
           Reset,
-          'crpack --raw /path/to/clone/of/package.json',
-          Yellow,
-          Dim,
-          'Then it will be necessary to delete all files from the project root!',
-          Reset
+          'crpack --raw /path/to/clone/of/package.json'
         );
       }
     }
@@ -1175,22 +1170,41 @@ to change run with the option:${Reset}${Bright} --renew-default`,
     return 0;
   }
 
+  /**
+   * @param {string} repository
+   * @param {string} branch
+   * @returns {Promise<ResultUndefined>}
+   */
+  async pull(repository, branch = 'master') {
+    const res = await this.getSpawn({
+      command: 'git',
+      args: ['pull', `${repository}`, branch],
+      options: {
+        cwd: this.pwd,
+      },
+    });
+    if (res === 1) {
+      return 1;
+    }
+  }
+
+  /**
+   *
+   * @returns {Promise<Result>}
+   */
   async fromRawPackage() {
     const projectDir = fs.readdirSync(this.pwd);
     if (projectDir.length !== 0) {
-      console.error(
-        this.error,
-        Red,
-        'Working directory for raw package is not empty',
-        Reset,
-        Bright,
-        this.pwd,
-        Reset
-      );
-      return 1;
+      const pullRes = await this.pull(this.packageJsonConfig.repository);
+      if (pullRes === 1) {
+        return 1;
+      }
+    } else {
+      const cloneRes = await this.clone();
+      if (cloneRes === 1) {
+        return 1;
+      }
     }
-
-    const cloneRes = await this.clone();
 
     const _installRes = await this.installDependencies();
     if (_installRes === 1) {

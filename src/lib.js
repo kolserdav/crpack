@@ -238,6 +238,7 @@ module.exports = class Worker {
     const { command, args, options, onData } = props;
     console.info(Dim, `$ ${command} ${args.join(' ')}`, Reset);
     const sh = spawn.call('sh', command, args, options || {});
+    sh.stdout.pipe(process.stdout);
     let errorData = '';
     let _data = '';
     return await new Promise((resolve, reject) => {
@@ -280,50 +281,7 @@ module.exports = class Worker {
         }
         resolve(_data || code);
       });
-    }).catch((e) => {
-      if (!/AbortError/.test(e)) {
-        if (args[0] === 'run' && args[1] === 'start' && new RegExp('Permission denied').test(e)) {
-          console.info('===================================================');
-          console.warn(
-            this.warning,
-            Yellow,
-            'Try add npm path',
-            Reset,
-            Bright,
-            this.npmPath,
-            Reset,
-            Yellow,
-            'to visudo, command:',
-            Reset,
-            Bright,
-            'sudo visudo',
-            Reset
-          );
-        }
-        if (command !== 'nginx' && args[0] !== '-t' && /\.conf syntax is ok/.test(e)) {
-          console.warn(this.warning, Yellow, errorData, Reset);
-        } else if (errorData) {
-          console.info('____________________________________________________________________\n');
-          let color = Cyan;
-          let status = 'info';
-          if (/npm ERR/.test(errorData) || /fatal/.test(errorData) || /throw err/.test(errorData)) {
-            color = Red;
-            status = 'error';
-          }
-          console.error(this[status], color, errorData, Reset);
-        }
-        if (_data) {
-          let color = Cyan;
-          if (/fatal/.test(_data)) {
-            color = Red;
-          }
-          console.info(this.info, color, _data, Reset);
-        }
-        if (command !== 'nginx' && args[0] !== '-t' && /\.conf syntax is ok/.test(e)) {
-          console.error(this.error, `Run command ${command} end with error`, Red, e, Reset);
-        }
-      }
-    });
+    }).catch((e) => {});
   }
 
   /**
@@ -666,10 +624,9 @@ to change run with the option:${Reset}${Bright} --renew-default`,
    * Save config
    * @param {string} filePath
    * @param {ReturnType<parser['readConfigFile']>} nginxConfig
-   * @param {string} domain
    * @returns
    */
-  async writeNginxConfig(filePath, nginxConfig, domain) {
+  async writeNginxConfig(filePath, nginxConfig) {
     return new Promise((resolve, reject) => {
       parser.writeConfigFile(filePath, nginxConfig, false, (err, res) => {
         if (err) {
@@ -796,6 +753,7 @@ to change run with the option:${Reset}${Bright} --renew-default`,
         await this.changeNginxServerSection();
       }
     }
+
     return _nginxConfig;
   }
 
@@ -1120,9 +1078,6 @@ to change run with the option:${Reset}${Bright} --renew-default`,
           return 1;
         }
       }
-      if (typeof preStartPackage === 'string') {
-        console.info(this.info, Blue, preStartPackage, Reset);
-      }
     }
 
     if (this.rawPackage && preStartPackage !== 0) {
@@ -1243,10 +1198,9 @@ to change run with the option:${Reset}${Bright} --renew-default`,
         env: this.getEnv('production'),
       },
     });
-    if (buildRes === 1 || buildRes === undefined) {
+    if (buildRes === 1) {
       return 1;
     }
-    console.info(this.info, Cyan, buildRes, Reset);
     return 0;
   }
 
@@ -1271,7 +1225,7 @@ to change run with the option:${Reset}${Bright} --renew-default`,
   async installDependencies() {
     const installRes = await this.getSpawn({
       command: `${this.npmPath}/npm`,
-      args: ['install', '--force'],
+      args: ['install', '--legacy-peer-deps'],
       options: {
         cwd: this.pwd,
         env: this.getEnv('development'),
@@ -1280,7 +1234,6 @@ to change run with the option:${Reset}${Bright} --renew-default`,
     if (installRes === 1 || installRes === undefined) {
       return 1;
     }
-    console.info(this.info, Cyan, installRes, Reset);
     return 0;
   }
 

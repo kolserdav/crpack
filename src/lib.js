@@ -276,9 +276,6 @@ module.exports = class Worker {
           console.info(this.info, Cyan, Dim, errorData, Reset);
           resolve(0);
         }
-        if (errorData) {
-          reject(errorData);
-        }
         resolve(_data || code);
       });
     }).catch((e) => {});
@@ -1120,7 +1117,6 @@ to change run with the option:${Reset}${Bright} --renew-default`,
     if (statusPackage === 1 || statusPackage === undefined) {
       return 1;
     }
-    console.info(this.info, Cyan, statusPackage, Reset);
 
     return 0;
   }

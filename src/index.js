@@ -410,7 +410,7 @@ OPTIONS:
       return 1;
     }
 
-    await this.wait(2000);
+    await this.wait(4000);
 
     const restartRes = await this.restartService();
     if (restartRes === 1) {

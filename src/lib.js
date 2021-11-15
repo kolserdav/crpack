@@ -656,6 +656,7 @@ to change run with the option:${Reset}${Bright} --renew-default`,
    * @returns {Promise<ReturnType<parser['readConfigFile']>>}
    */
   async createNginxFile(nginxConfig, subConfig = false) {
+    // TODO rewrite
     const confDValue = 'conf.d/*.conf';
     let _nginxConfig = { ...nginxConfig };
     if (!_nginxConfig.http) {
@@ -1054,7 +1055,7 @@ to change run with the option:${Reset}${Bright} --renew-default`,
     if (!this.rawPackage) {
       preStartPackage = await this.getSpawn({
         command: `${this.npmPath}/npm`,
-        args: ['run', 'start'],
+        args: ['run', 'test'],
         options: {
           cwd: this.pwd,
           signal,

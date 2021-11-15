@@ -369,7 +369,7 @@ module.exports = class Employer {
         return;
       }
 
-      await worker.wait(2000);
+      await worker.wait(4000);
 
       const packageJsonConfig = worker.setPackageJson(path.resolve(worker.pwd, 'package.json'));
       if (packageJsonConfig === 1) {

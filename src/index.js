@@ -403,10 +403,14 @@ OPTIONS:
       return 1;
     }
 
+    await this.wait(2000);
+
     const buildRes = await this.buildPackage();
     if (buildRes === 1) {
       return 1;
     }
+
+    await this.wait(2000);
 
     const restartRes = await this.restartService();
     if (restartRes === 1) {

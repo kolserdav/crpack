@@ -398,6 +398,16 @@ OPTIONS:
       }
     }
 
+    const installRes = await this.installDependencies();
+    if (installRes === 1) {
+      return 1;
+    }
+
+    const buildRes = await this.buildPackage();
+    if (buildRes === 1) {
+      return 1;
+    }
+
     const restartRes = await this.restartService();
     if (restartRes === 1) {
       return 1;

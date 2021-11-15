@@ -4,11 +4,8 @@ const path = require('path');
 const SSHConfig = require('ssh-config');
 const Worker = require('./lib');
 const readline = require('readline');
-const linebyline = require('linebyline');
 
 const worker = new Worker();
-
-const { EOL } = os;
 
 const Red = '\x1b[31m';
 const Reset = '\x1b[0m';
@@ -108,7 +105,7 @@ module.exports = class Employer {
     }
     this.sshHost = origin;
     this.configExists = false;
-    this.secretKeyPath = `${ssh}/${origin.replace(/\.\w+/, '')}`;
+    this.secretKeyPath = `${ssh}/${this.sshHost.replace(/\.\w+/, '')}`;
   }
 
   /**

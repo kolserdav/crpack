@@ -1045,7 +1045,7 @@ to change run with the option:${Reset}${Bright} --renew-default`,
           cwd: this.pwd,
           signal,
           env: {
-            PORT: 5151,
+            PORT: 5151, // TODO check free port
             NODE_ENV: process.env.NODE_ENV,
             PATH: process.env.PATH,
           },
@@ -1108,11 +1108,23 @@ to change run with the option:${Reset}${Bright} --renew-default`,
   }
 
   /**
+   * TODO add logic if pull not success
    * @param {string} repository
    * @param {string} branch
    * @returns {Promise<ResultUndefined>}
    */
   async pull(repository, branch = 'master') {
+    const chRes = await this.getSpawn({
+      command: 'git',
+      args: ['checkout', '.'],
+      options: {
+        cwd: this.pwd,
+      },
+    });
+    if (chRes === 1) {
+      return 1;
+    }
+
     const res = await this.getSpawn({
       command: 'git',
       args: ['pull', `${repository}`, branch],

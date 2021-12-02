@@ -352,6 +352,11 @@ module.exports = class Employer {
       diff = !compareRes;
     }
     if (diff) {
+      const checkoutRes = await worker.gitCheckout();
+      if (checkoutRes === 1) {
+        return 1;
+      }
+
       const pullRes = await worker.pull(repository, 'master');
       if (pullRes === 1) {
         return 1;

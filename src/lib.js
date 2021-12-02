@@ -1233,6 +1233,24 @@ to change run with the option:${Reset}${Bright} --renew-default`,
 
   /**
    *
+   * @returns {Promise<Result>}
+   */
+  async gitCheckout() {
+    const installRes = await this.getSpawn({
+      command: 'git',
+      args: ['checkout', '.'],
+      options: {
+        cwd: this.pwd,
+      },
+    });
+    if (installRes === 1 || installRes === undefined) {
+      return 1;
+    }
+    return 0;
+  }
+
+  /**
+   *
    * @param {number} time
    */
   async wait(time) {

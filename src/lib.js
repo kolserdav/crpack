@@ -276,6 +276,7 @@ module.exports = class Worker {
           console.info(this.info, Cyan, Dim, errorData, Reset);
           resolve(0);
         }
+        console.error(this.error, Red, Dim, errorData, Reset);
         resolve(_data || code);
       });
     }).catch((e) => {

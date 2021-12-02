@@ -278,7 +278,9 @@ module.exports = class Worker {
         }
         resolve(_data || code);
       });
-    }).catch((e) => {});
+    }).catch((e) => {
+      console.log('Error spawn', e);
+    });
   }
 
   /**

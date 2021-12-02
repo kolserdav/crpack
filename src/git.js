@@ -374,15 +374,6 @@ module.exports = class Employer {
         return;
       }
 
-      // If next.js app
-      await worker.getSpawn({
-        command: 'rm',
-        args: ['-rf', '.next'],
-        options: {
-          cwd: worker.pwd,
-        },
-      });
-
       await worker.wait(2000);
 
       const packageJsonConfig = worker.setPackageJson(path.resolve(worker.pwd, 'package.json'));

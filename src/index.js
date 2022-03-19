@@ -142,7 +142,6 @@ class Factory extends Worker {
 
 COMMANDS:
   run: start create package script
-  show-default: show default nginx config
   update: update git local commit
 
 OPTIONS:

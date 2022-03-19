@@ -2,6 +2,9 @@
   "name": "crpack",
   "version": "2.3.4-alfa",
   "description": "Run node.js package as systemd service",
+  "os": [
+    "linux"
+  ],
   "keywords": [
     "node",
     "node.js",

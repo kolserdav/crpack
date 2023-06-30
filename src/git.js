@@ -7,6 +7,8 @@ const readline = require('readline');
 
 const worker = new Worker();
 
+const { username } = os.userInfo();
+
 const Red = '\x1b[31m';
 const Reset = '\x1b[0m';
 const Bright = '\x1b[1m';
@@ -83,7 +85,7 @@ module.exports = class Employer {
   err;
 
   constructor() {
-    const ssh = '/root/.ssh';
+    const ssh = `/${username}/.ssh`;
     this.sshConfig = `${ssh}/config`;
     this.sshConfigDefault = path.resolve(__dirname, '../.crpack/templates/git/ssh/config');
     worker.setPackageJson(path.resolve(worker.pwd, 'package.json'));
@@ -371,7 +373,8 @@ module.exports = class Employer {
 
       const buildPackage = await worker.buildPackage();
       if (buildPackage === 1) {
-        return;
+        console.warn(worker.warning, Yellow, 'Build package error', Reset);
+        return 1;
       }
 
       await worker.wait(2000);
@@ -408,6 +411,10 @@ module.exports = class Employer {
     const headRegex = /^[a-zA-Z0-9]+/;
     if (gitRes) {
       const headReg = gitRes.match(headRegex);
+      if (headReg === null) {
+        console.warn(worker.warning, Yellow, 'Head reg is null', Reset);
+        return 1;
+      }
       head = headReg[0] || null;
     }
     if (!head) {
@@ -423,11 +430,16 @@ module.exports = class Employer {
       },
     });
     if (gitLocal === 1) {
+      console.warn(worker.warning, Yellow, 'Git local error', Reset);
       return 1;
     }
     let localHead = null;
     if (gitLocal) {
       const localHeadReg = gitLocal.match(headRegex);
+      if (localHeadReg === null) {
+        console.warn(worker.warning, Yellow, 'Local head reg is null', Reset);
+        return 1;
+      }
       localHead = localHeadReg[0] || null;
     }
     if (!localHead) {

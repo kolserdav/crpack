@@ -158,7 +158,7 @@ module.exports = class Worker {
   nginxPath;
 
   /**
-   * @type {string}
+   * @type {string | null}
    */
   nginxVersion;
 
@@ -418,8 +418,8 @@ module.exports = class Worker {
       return 1;
     }
     if (typeof npmPath === 'string') {
-      console.info(this.info, 'Npm path:', Cyan, npmPath, Reset);
       this.npmPath = path.normalize(npmPath.replace(/\/npm/, '')).replace(/\n/, '');
+      console.info(this.info, 'Npm path:', Cyan, this.npmPath, Reset);
     }
     return 0;
   }

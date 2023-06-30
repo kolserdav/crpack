@@ -47,6 +47,11 @@ class Factory extends Worker {
   git;
 
   /**
+   * @type {boolean}
+   */
+  skipNginx;
+
+  /**
    * @type {string} - name of package
    */
   name;
@@ -102,6 +107,7 @@ class Factory extends Worker {
    *  renewDefault: '--renew-default';
    *  test: '--test';
    *  port: '--port';
+   *  skipNginx: '--skip-nginx',
    *  disabled: '--disabled';
    *  nginxPath: '--nginx-path';
    *  nodeEnv: '--node-env';
@@ -119,6 +125,7 @@ class Factory extends Worker {
     port: '--port',
     disabled: '--disabled',
     nginxPath: '--nginx-path',
+    skipNginx: '--skip-nginx',
     nodeEnv: '--node-env',
     certbotPath: '--certbot-path',
     ssl: '--ssl',
@@ -152,6 +159,7 @@ OPTIONS:
   --test: run in dev as prod
   --port [number]: local application port
   --disabled: don't add package to autorun
+  --skip-nginx: don't create nginx config
   --node-env [development | production]: application NODE_ENV
   --nginx-path [absolute path]: nginx path  
   --ssl: create certificate with certbot
@@ -192,6 +200,7 @@ OPTIONS:
       port,
       disabled,
       nginxPath,
+      skipNginx,
       nodeEnv,
       certbotPath,
       ssl,
@@ -204,6 +213,9 @@ OPTIONS:
     }
     if (argv.indexOf(ssl) !== -1) {
       this.ssl = true;
+    }
+    if (argv.indexOf(skipNginx) !== -1) {
+      this.skipNginx = true;
     }
     if (argv.indexOf(git) !== -1) {
       this.git = true;
@@ -341,28 +353,31 @@ OPTIONS:
     } else {
       this.packageName = packageName;
     }
-    const nginxExists = this.fileExists(this.nginxConfigPath);
-    if (!nginxExists) {
-      console.warn(
-        this.warning,
-        Yellow,
-        'Nginx config not found in:',
-        Reset,
-        Cyan,
-        this.nginxConfigPath,
-        Reset
-      );
-    }
-    this.nginxConfigPath = nginxExists ? this.nginxConfigPath : await this.setUserNginxPath();
 
-    const setupNginx = await this.setupNginx();
-    if (setupNginx === 1) {
-      return 1;
-    }
+    if (!this.skipNginx) {
+      const nginxExists = this.fileExists(this.nginxConfigPath);
+      if (!nginxExists) {
+        console.warn(
+          this.warning,
+          Yellow,
+          'Nginx config not found in:',
+          Reset,
+          Cyan,
+          this.nginxConfigPath,
+          Reset
+        );
+      }
+      this.nginxConfigPath = nginxExists ? this.nginxConfigPath : await this.setUserNginxPath();
 
-    const restartNginx = await this.restartNginx();
-    if (restartNginx === 1) {
-      return 1;
+      const setupNginx = await this.setupNginx();
+      if (setupNginx === 1) {
+        return 1;
+      }
+
+      const restartNginx = await this.restartNginx();
+      if (restartNginx === 1) {
+        return 1;
+      }
     }
 
     // Create ssl certificate
@@ -419,9 +434,19 @@ OPTIONS:
     console.info(this.info, 'Git enabled:', Blue, this.git, Reset);
     console.info(this.info, 'SSL enabled:', Blue, this.ssl, Reset);
     console.info(this.info, 'SSH config:', Blue, !this.git ? git.sshConfig : undefined, Reset);
-    console.info(this.info, 'Nginx config path: ', Blue, this.nginxConfigPath, Reset);
+    if (this.skipNginx) {
+      console.info(
+        this.warning,
+        'Nginx config is skipping: ',
+        Blue,
+        { skipNginx: this.skipNginx },
+        Reset
+      );
+    } else {
+      console.info(this.info, 'Domain name:', Blue, this.domain, Reset);
+      console.info(this.info, 'Nginx config path: ', Blue, this.nginxConfigPath, Reset);
+    }
     console.info(this.info, 'Package name:', Blue, this.packageName, Reset);
-    console.info(this.info, 'Domain name:', Blue, this.domain, Reset);
     console.info(
       this.info,
       'Service config:',

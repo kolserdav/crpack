@@ -49,7 +49,7 @@ class Factory extends Worker {
   /**
    * @type {boolean}
    */
-  skipNginx;
+  nginx;
 
   /**
    * @type {string} - name of package
@@ -107,7 +107,7 @@ class Factory extends Worker {
    *  renewDefault: '--renew-default';
    *  test: '--test';
    *  port: '--port';
-   *  skipNginx: '--skip-nginx',
+   *  nginx: '--nginx',
    *  disabled: '--disabled';
    *  nginxPath: '--nginx-path';
    *  nodeEnv: '--node-env';
@@ -125,7 +125,7 @@ class Factory extends Worker {
     port: '--port',
     disabled: '--disabled',
     nginxPath: '--nginx-path',
-    skipNginx: '--skip-nginx',
+    nginx: '--nginx',
     nodeEnv: '--node-env',
     certbotPath: '--certbot-path',
     ssl: '--ssl',
@@ -159,7 +159,7 @@ OPTIONS:
   --test: run in dev as prod
   --port [number]: local application port
   --disabled: don't add package to autorun
-  --skip-nginx: don't create nginx config
+  --nginx: create nginx config
   --node-env [development | production]: application NODE_ENV
   --nginx-path [absolute path]: nginx path  
   --ssl: create certificate with certbot
@@ -200,7 +200,7 @@ OPTIONS:
       port,
       disabled,
       nginxPath,
-      skipNginx,
+      nginx,
       nodeEnv,
       certbotPath,
       ssl,
@@ -214,8 +214,8 @@ OPTIONS:
     if (argv.indexOf(ssl) !== -1) {
       this.ssl = true;
     }
-    if (argv.indexOf(skipNginx) !== -1) {
-      this.skipNginx = true;
+    if (argv.indexOf(nginx) !== -1) {
+      this.nginx = true;
     }
     if (argv.indexOf(git) !== -1) {
       this.git = true;
@@ -354,7 +354,7 @@ OPTIONS:
       this.packageName = packageName;
     }
 
-    if (!this.skipNginx) {
+    if (this.nginx) {
       const nginxExists = this.fileExists(this.nginxConfigPath);
       if (!nginxExists) {
         console.warn(
@@ -434,15 +434,7 @@ OPTIONS:
     console.info(this.info, 'Git enabled:', Blue, this.git, Reset);
     console.info(this.info, 'SSL enabled:', Blue, this.ssl, Reset);
     console.info(this.info, 'SSH config:', Blue, !this.git ? git.sshConfig : undefined, Reset);
-    if (this.skipNginx) {
-      console.info(
-        this.warning,
-        'Nginx config is skipping: ',
-        Blue,
-        { skipNginx: this.skipNginx },
-        Reset
-      );
-    } else {
+    if (this.nginx) {
       console.info(this.info, 'Domain name:', Blue, this.domain, Reset);
       console.info(this.info, 'Nginx config path: ', Blue, this.nginxConfigPath, Reset);
     }

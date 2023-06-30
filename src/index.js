@@ -52,6 +52,11 @@ class Factory extends Worker {
   nginx;
 
   /**
+   * @type {boolean}
+   */
+  system;
+
+  /**
    * @type {string} - name of package
    */
   name;
@@ -108,6 +113,7 @@ class Factory extends Worker {
    *  test: '--test';
    *  port: '--port';
    *  nginx: '--nginx',
+   *  system: '--system',
    *  disabled: '--disabled';
    *  nginxPath: '--nginx-path';
    *  nodeEnv: '--node-env';
@@ -126,6 +132,7 @@ class Factory extends Worker {
     disabled: '--disabled',
     nginxPath: '--nginx-path',
     nginx: '--nginx',
+    system: '--system',
     nodeEnv: '--node-env',
     certbotPath: '--certbot-path',
     ssl: '--ssl',
@@ -160,6 +167,7 @@ OPTIONS:
   --port [number]: local application port
   --disabled: don't add package to autorun
   --nginx: create nginx config
+  --system: create systemd config
   --node-env [development | production]: application NODE_ENV
   --nginx-path [absolute path]: nginx path  
   --ssl: create certificate with certbot
@@ -204,6 +212,7 @@ OPTIONS:
       nodeEnv,
       certbotPath,
       ssl,
+      system,
       git,
       cwd,
       raw,
@@ -216,6 +225,9 @@ OPTIONS:
     }
     if (argv.indexOf(nginx) !== -1) {
       this.nginx = true;
+    }
+    if (argv.indexOf(system) !== -1) {
+      this.system = true;
     }
     if (argv.indexOf(git) !== -1) {
       this.git = true;
@@ -391,10 +403,13 @@ OPTIONS:
       }
     }
 
-    const setUpPack = await this.setupPackage();
-    if (setUpPack === 1) {
-      return 1;
+    if (this.system) {
+      const setUpPack = await this.setupPackage();
+      if (setUpPack === 1) {
+        return 1;
+      }
     }
+
     if (this.git) {
       const sshConfig = await git.setSshHost();
       if (sshConfig === 1) {
@@ -439,13 +454,15 @@ OPTIONS:
       console.info(this.info, 'Nginx config path: ', Blue, this.nginxConfigPath, Reset);
     }
     console.info(this.info, 'Package name:', Blue, this.packageName, Reset);
-    console.info(
-      this.info,
-      'Service config:',
-      Blue,
-      `${this.systemdConfigDir}${this.packageName}.service`,
-      Reset
-    );
+    if (this.system) {
+      console.info(
+        this.info,
+        'Service config:',
+        Blue,
+        `${this.systemdConfigDir}${this.packageName}.service`,
+        Reset
+      );
+    }
     await this.versionWarning();
     return 0;
   }
